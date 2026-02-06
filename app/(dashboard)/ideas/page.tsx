@@ -19,9 +19,10 @@ export default function IdeasPage() {
     try {
       const response = await fetch('/api/ideas')
       const data = await response.json()
-      setIdeas(data)
+      setIdeas(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Failed to fetch ideas:', error)
+      setIdeas([])
     } finally {
       setIsLoading(false)
     }
@@ -45,15 +46,15 @@ export default function IdeasPage() {
     }
   }
 
-  const filteredIdeas = filter === 'all' 
-    ? ideas 
-    : ideas.filter(idea => idea.status === filter)
+  const filteredIdeas = filter === 'all'
+    ? (Array.isArray(ideas) ? ideas : [])
+    : (Array.isArray(ideas) ? ideas.filter(idea => idea.status === filter) : [])
 
   const statusCounts = {
-    brainstorm: ideas.filter(i => i.status === 'brainstorm').length,
-    research: ideas.filter(i => i.status === 'research').length,
-    in_progress: ideas.filter(i => i.status === 'in_progress').length,
-    shipped: ideas.filter(i => i.status === 'shipped').length,
+    brainstorm: Array.isArray(ideas) ? ideas.filter(i => i.status === 'brainstorm').length : 0,
+    research: Array.isArray(ideas) ? ideas.filter(i => i.status === 'research').length : 0,
+    in_progress: Array.isArray(ideas) ? ideas.filter(i => i.status === 'in_progress').length : 0,
+    shipped: Array.isArray(ideas) ? ideas.filter(i => i.status === 'shipped').length : 0,
   }
 
   if (isLoading) {

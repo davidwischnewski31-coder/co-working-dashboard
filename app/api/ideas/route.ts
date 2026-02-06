@@ -32,8 +32,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result.rows)
   } catch (error) {
     console.error('Error fetching ideas:', error)
+    console.error('Database URL exists:', !!process.env.DATABASE_URL)
+    console.error('Error details:', error instanceof Error ? error.message : 'Unknown error')
     return NextResponse.json(
-      { error: 'Failed to fetch ideas' },
+      {
+        error: 'Failed to fetch ideas',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     )
   }
@@ -88,7 +93,10 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: 'Failed to create idea' },
+      {
+        error: 'Failed to create idea',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     )
   }

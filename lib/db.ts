@@ -8,14 +8,15 @@ function getPool(): Pool {
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-      max: 20,
+      max: 5,  // Reduced for serverless
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
+      connectionTimeoutMillis: 10000,  // Increased for cold starts
+      allowExitOnIdle: true,  // Allow serverless to clean up
     })
 
     pool.on('error', (err) => {
-      console.error('Unexpected error on idle client', err)
-      process.exit(-1)
+      console.error('Database connection error:', err)
+      // Don't exit - let Vercel handle it
     })
   }
 

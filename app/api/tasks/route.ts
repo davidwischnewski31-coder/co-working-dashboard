@@ -44,8 +44,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result.rows)
   } catch (error) {
     console.error('Error fetching tasks:', error)
+    console.error('Database URL exists:', !!process.env.DATABASE_URL)
+    console.error('Error details:', error instanceof Error ? error.message : 'Unknown error')
     return NextResponse.json(
-      { error: 'Failed to fetch tasks' },
+      {
+        error: 'Failed to fetch tasks',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     )
   }
@@ -103,7 +108,10 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: 'Failed to create task' },
+      {
+        error: 'Failed to create task',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     )
   }

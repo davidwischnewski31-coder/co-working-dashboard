@@ -20,8 +20,13 @@ export async function GET() {
     return NextResponse.json(result.rows)
   } catch (error) {
     console.error('Error fetching reading lists:', error)
+    console.error('Database URL exists:', !!process.env.DATABASE_URL)
+    console.error('Error details:', error instanceof Error ? error.message : 'Unknown error')
     return NextResponse.json(
-      { error: 'Failed to fetch reading lists' },
+      {
+        error: 'Failed to fetch reading lists',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     )
   }
@@ -54,7 +59,10 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: 'Failed to create reading list' },
+      {
+        error: 'Failed to create reading list',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     )
   }
