@@ -8,14 +8,15 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const status = searchParams.get('status')
+    const priority = searchParams.get('priority')
     const project_id = searchParams.get('project_id')
-    const owner_type = searchParams.get('owner_type')
+    const assignee_type = searchParams.get('assignee_type')
 
     let query = `
       SELECT t.*, p.name as project_name, p.color as project_color
       FROM tasks t
       LEFT JOIN projects p ON t.project_id = p.id
-      WHERE 1=1
+      WHERE t.status != 'done'
     `
     const params: any[] = []
     let paramCount = 1
@@ -26,19 +27,36 @@ export async function GET(request: NextRequest) {
       paramCount++
     }
 
+    if (priority) {
+      query += ` AND t.priority = $${paramCount}`
+      params.push(priority)
+      paramCount++
+    }
+
     if (project_id) {
       query += ` AND t.project_id = $${paramCount}`
       params.push(project_id)
       paramCount++
     }
 
-    if (owner_type) {
-      query += ` AND t.owner_type = $${paramCount}`
-      params.push(owner_type)
+    if (assignee_type) {
+      query += ` AND t.assignee_type = $${paramCount}`
+      params.push(assignee_type)
       paramCount++
     }
 
-    query += ` ORDER BY t.created_at DESC`
+    // V2: Order by priority (high first) then position
+    query += ` ORDER BY
+      CASE t.priority
+        WHEN 'urgent' THEN 1
+        WHEN 'high' THEN 2
+        WHEN 'medium' THEN 3
+        WHEN 'low' THEN 4
+        ELSE 5
+      END,
+      t.position ASC,
+      t.created_at DESC
+    `
 
     const result = await db.query(query, params)
     return NextResponse.json(result.rows)

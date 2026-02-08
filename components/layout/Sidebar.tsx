@@ -3,17 +3,19 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { 
-  LayoutDashboard, 
-  KanbanSquare, 
-  FolderOpen, 
-  Lightbulb, 
+import {
+  LayoutDashboard,
+  KanbanSquare,
+  FolderOpen,
+  Lightbulb,
   BookOpen,
-  Activity 
+  Activity,
+  Zap
 } from 'lucide-react'
 
 const navigation = [
   { name: 'Overview', href: '/', icon: LayoutDashboard },
+  { name: 'V2 Dashboard', href: '/v2', icon: Zap },
   { name: 'Kanban', href: '/kanban', icon: KanbanSquare },
   { name: 'Projects', href: '/projects', icon: FolderOpen },
   { name: 'Ideas', href: '/ideas', icon: Lightbulb },

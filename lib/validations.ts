@@ -30,7 +30,7 @@ export const createProjectSchema = z.object({
 export const updateProjectSchema = createProjectSchema.partial()
 
 // Task schemas
-export const taskStatusSchema = z.enum(['backlog', 'todo', 'in_progress', 'review', 'done'])
+export const taskStatusSchema = z.enum(['backlog', 'todo', 'in_progress', 'blocked', 'review', 'done'])
 export const taskPrioritySchema = z.enum(['low', 'medium', 'high', 'urgent'])
 export const ownerTypeSchema = z.enum(['human', 'agent'])
 
