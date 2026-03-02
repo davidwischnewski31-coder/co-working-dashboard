@@ -71,7 +71,7 @@ export const updateTaskSchema = createTaskSchema.partial()
 
 // Idea schemas
 export const ideaCategorySchema = z.enum(['product', 'tool', 'business', 'research'])
-export const ideaStatusSchema = z.enum(['brainstorm', 'research', 'in_progress', 'shipped'])
+export const ideaStatusSchema = z.enum(['brainstorm', 'research', 'in_progress', 'shipped', 'archived'])
 
 export const ideaSchema = z.object({
   id: z.string().uuid(),

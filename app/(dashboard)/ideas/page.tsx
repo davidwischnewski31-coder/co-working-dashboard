@@ -1,151 +1,377 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { IdeaCard } from '@/components/ideas/IdeaCard'
-import { Button } from '@/components/ui/button'
-import { Plus } from 'lucide-react'
-import type { Idea } from '@/lib/validations'
+import { JourneyPanel } from '@/components/variant/JourneyPanel'
+
+import { useMemo, useState } from 'react'
+import { ArrowRight, Lightbulb, Plus } from 'lucide-react'
+import { useWorkspace } from '@/components/providers/WorkspaceProvider'
+import { formatDate } from '@/lib/utils'
+import type { IdeaCategory, IdeaStatus, OwnerType, WorkspaceIdea } from '@/lib/workspace'
+
+const STATUS_ORDER: Array<Exclude<IdeaStatus, 'archived'>> = ['brainstorm', 'research', 'in_progress', 'shipped']
+
+const STATUS_LABELS: Record<IdeaStatus, string> = {
+  brainstorm: 'Brainstorm',
+  research: 'Research',
+  in_progress: 'In Progress',
+  shipped: 'Shipped',
+  archived: 'Archived',
+}
+
+const CATEGORY_LABELS: Record<IdeaCategory, string> = {
+  product: 'Product',
+  tool: 'Tool',
+  business: 'Business',
+  research: 'Research',
+}
+
+function nextIdeaStatus(status: IdeaStatus): IdeaStatus {
+  if (status === 'archived') {
+    return 'archived'
+  }
+
+  const index = STATUS_ORDER.indexOf(status)
+  if (index < 0) {
+    return status
+  }
+  return index >= STATUS_ORDER.length - 1 ? status : STATUS_ORDER[index + 1]
+}
+
+function daysSince(updatedAt: string): number {
+  const updated = new Date(updatedAt).getTime()
+  if (Number.isNaN(updated)) {
+    return 0
+  }
+
+  return Math.floor((Date.now() - updated) / (1000 * 60 * 60 * 24))
+}
 
 export default function IdeasPage() {
-  const [ideas, setIdeas] = useState<Idea[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [filter, setFilter] = useState<string>('all')
+  const { data, createIdea, updateIdeaStatus } = useWorkspace()
 
-  useEffect(() => {
-    fetchIdeas()
-  }, [])
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [category, setCategory] = useState<IdeaCategory>('product')
+  const [ownerType, setOwnerType] = useState<OwnerType>('human')
+  const [statusFilter, setStatusFilter] = useState<'all' | IdeaStatus>('all')
+  const [showArchived, setShowArchived] = useState(false)
+  const [formExpanded, setFormExpanded] = useState(false)
 
-  async function fetchIdeas() {
-    try {
-      const response = await fetch('/api/ideas')
-      const data = await response.json()
-      setIdeas(Array.isArray(data) ? data : [])
-    } catch (error) {
-      console.error('Failed to fetch ideas:', error)
-      setIdeas([])
-    } finally {
-      setIsLoading(false)
+  const activeIdeas = useMemo(() => data.ideas.filter((idea) => idea.status !== 'archived'), [data.ideas])
+  const archivedIdeas = useMemo(() => data.ideas.filter((idea) => idea.status === 'archived'), [data.ideas])
+
+  const filteredIdeas = useMemo(() => {
+    return activeIdeas.filter((idea) => (statusFilter === 'all' ? true : idea.status === statusFilter))
+  }, [activeIdeas, statusFilter])
+
+  const ideasByStatus = useMemo(() => {
+    const grouped: Record<Exclude<IdeaStatus, 'archived'>, WorkspaceIdea[]> = {
+      brainstorm: [],
+      research: [],
+      in_progress: [],
+      shipped: [],
     }
-  }
 
-  async function createIdea() {
-    try {
-      const response = await fetch('/api/ideas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: 'New Idea',
-          owner: 'David',
-          owner_type: 'human',
-          status: 'brainstorm',
-        }),
-      })
-      await fetchIdeas()
-    } catch (error) {
-      console.error('Failed to create idea:', error)
+    for (const idea of filteredIdeas) {
+      if (idea.status === 'archived') {
+        continue
+      }
+      grouped[idea.status].push(idea)
     }
-  }
 
-  const filteredIdeas = filter === 'all'
-    ? (Array.isArray(ideas) ? ideas : [])
-    : (Array.isArray(ideas) ? ideas.filter(idea => idea.status === filter) : [])
+    return grouped
+  }, [filteredIdeas])
 
-  const statusCounts = {
-    brainstorm: Array.isArray(ideas) ? ideas.filter(i => i.status === 'brainstorm').length : 0,
-    research: Array.isArray(ideas) ? ideas.filter(i => i.status === 'research').length : 0,
-    in_progress: Array.isArray(ideas) ? ideas.filter(i => i.status === 'in_progress').length : 0,
-    shipped: Array.isArray(ideas) ? ideas.filter(i => i.status === 'shipped').length : 0,
-  }
+  const staleIdeas = useMemo(() => {
+    return activeIdeas.filter((idea) => idea.status === 'brainstorm' && daysSince(idea.updated_at) >= 14)
+  }, [activeIdeas])
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-gray-500">Loading ideas...</p>
-      </div>
-    )
+  function handleCreateIdea(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const normalizedTitle = title.trim()
+    if (!normalizedTitle) {
+      return
+    }
+
+    createIdea({
+      title: normalizedTitle,
+      description,
+      category,
+      owner_type: ownerType,
+      status: 'brainstorm',
+    })
+
+    setTitle('')
+    setDescription('')
+    setCategory('product')
+    setOwnerType('human')
+    setFormExpanded(false)
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold text-gray-900">Ideas</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            {ideas.length} total ideas
+    <div className="space-y-6 variant-page variant-page-ideas">
+      <JourneyPanel page="ideas" />
+      <section className="rounded-2xl border border-[#E8E2D8] bg-white p-5 shadow-sm sm:p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-[#1C1714] sm:text-2xl">Ideas Pipeline</h1>
+            <p className="mt-1 text-sm text-[#7A6F65]">
+              Capture sparks fast, then deliberately move the best ones toward shipping.
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-2 rounded-full bg-[#F5F4F2] px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">
+            <Lightbulb className="h-3.5 w-3.5" />
+            {data.ideas.length} total ideas
+          </span>
+        </div>
+
+        {!formExpanded ? (
+          <button
+            type="button"
+            onClick={() => setFormExpanded(true)}
+            className="flex w-full items-center gap-2 rounded-xl border border-dashed border-[#E8E2D8] px-4 py-3 text-sm text-[#7A6F65] transition-colors hover:border-[#C8620A] hover:text-[#C8620A]"
+          >
+            <Plus className="h-4 w-4" />
+            Capture an idea...
+          </button>
+        ) : (
+          <form onSubmit={handleCreateIdea} className="grid gap-3 lg:grid-cols-12">
+            <div className="lg:col-span-4">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">
+                Idea
+              </label>
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="What problem or opportunity did you spot?"
+                className="w-full rounded-xl border border-[#E8E2D8] bg-[#FAFAF9] px-3 py-2.5 text-sm text-[#1C1714] outline-none transition focus:border-[#C8620A] focus:ring-2 focus:ring-[#FEF3E2]"
+              />
+            </div>
+
+            <div className="lg:col-span-4">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">
+                Notes
+              </label>
+              <input
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="Why this matters now"
+                className="w-full rounded-xl border border-[#E8E2D8] bg-[#FAFAF9] px-3 py-2.5 text-sm text-[#1C1714] outline-none transition focus:border-[#C8620A] focus:ring-2 focus:ring-[#FEF3E2]"
+              />
+            </div>
+
+            <div className="lg:col-span-2">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">
+                Category
+              </label>
+              <select
+                value={category}
+                onChange={(event) => setCategory(event.target.value as IdeaCategory)}
+                className="w-full rounded-xl border border-[#E8E2D8] bg-[#FAFAF9] px-3 py-2.5 text-sm text-[#1C1714]"
+              >
+                <option value="product">Product</option>
+                <option value="tool">Tool</option>
+                <option value="business">Business</option>
+                <option value="research">Research</option>
+              </select>
+            </div>
+
+            <div className="lg:col-span-1">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">
+                Owner
+              </label>
+              <select
+                value={ownerType}
+                onChange={(event) => setOwnerType(event.target.value as OwnerType)}
+                className="w-full rounded-xl border border-[#E8E2D8] bg-[#FAFAF9] px-3 py-2.5 text-sm text-[#1C1714]"
+              >
+                <option value="human">David</option>
+                <option value="agent">AI</option>
+              </select>
+            </div>
+
+            <div className="lg:col-span-1 lg:self-end">
+              <button
+                type="submit"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#C8620A] px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#A04D06]"
+              >
+                <Plus className="h-4 w-4" />
+                Add
+              </button>
+            </div>
+
+            <div className="lg:col-span-12">
+              <button
+                type="button"
+                onClick={() => setFormExpanded(false)}
+                className="text-sm text-[#7A6F65] hover:text-[#1C1714]"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+
+      <div className="flex flex-wrap gap-2">
+        {['all', ...STATUS_ORDER].map((status) => {
+          const value = status as 'all' | IdeaStatus
+          const label = value === 'all' ? 'All' : STATUS_LABELS[value]
+          const count = value === 'all' ? activeIdeas.length : activeIdeas.filter((idea) => idea.status === value).length
+
+          return (
+            <button
+              key={value}
+              onClick={() => setStatusFilter(value)}
+              className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+                statusFilter === value
+                  ? 'bg-[#1C1714] text-white'
+                  : 'border border-[#E8E2D8] bg-white text-[#7A6F65] hover:bg-[#FAFAF9]'
+              }`}
+            >
+              {label} ({count})
+            </button>
+          )
+        })}
+      </div>
+
+      <section className="flex gap-4 overflow-x-auto">
+        {STATUS_ORDER.map((status) => {
+          const isEmpty = ideasByStatus[status].length === 0
+          const isShipped = status === 'shipped'
+
+          return (
+            <article
+              key={status}
+              className={`rounded-2xl border border-[#E8E2D8] bg-white p-4 shadow-sm transition-all ${
+                isEmpty && isShipped
+                  ? 'min-w-[140px] max-w-[180px] border-dashed bg-[#FFFDF8] opacity-75'
+                  : 'min-w-[200px] flex-1'
+              }`}
+            >
+              <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">
+                {STATUS_LABELS[status]}
+              </h2>
+              <p className="mb-3 text-xs text-[#7A6F65]">{ideasByStatus[status].length} ideas</p>
+
+              <div className="space-y-3">
+                {ideasByStatus[status].length === 0 ? (
+                  <div
+                    className={`rounded-lg border border-dashed px-3 py-4 text-center text-sm ${
+                      isShipped ? 'border-[#E6D8C2] text-[#8A7C70]' : 'border-[#E8E2D8] text-[#7A6F65]'
+                    }`}
+                  >
+                    {isShipped ? 'Ready for your first shipped idea.' : 'No ideas here'}
+                  </div>
+                ) : null}
+
+                {ideasByStatus[status].map((idea) => (
+                  <div key={idea.id} className="rounded-lg border border-[#E8E2D8] bg-[#FAFAF9] p-3">
+                    <p className="text-sm font-semibold text-[#1C1714]">{idea.title}</p>
+                    {idea.description ? (
+                      <p className="mt-1 text-xs text-[#7A6F65]">{idea.description}</p>
+                    ) : null}
+
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      <span className="rounded-full bg-[#F5F4F2] px-2 py-0.5 text-[11px] font-medium text-[#7A6F65]">
+                        {CATEGORY_LABELS[idea.category]}
+                      </span>
+                      <span className="rounded-full bg-[#F5F4F2] px-2 py-0.5 text-[11px] font-medium text-[#7A6F65]">
+                        {idea.owner}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-[#7A6F65]">Updated {formatDate(idea.updated_at)}</span>
+                      <button
+                        onClick={() => updateIdeaStatus(idea.id, nextIdeaStatus(idea.status))}
+                        disabled={idea.status === 'shipped'}
+                        className="inline-flex items-center gap-1 rounded-md border border-[#D0C8BE] bg-white px-2.5 py-1.5 text-xs font-medium text-[#7A6F65] transition-colors hover:border-[#C8620A] hover:text-[#C8620A] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Advance
+                        <ArrowRight className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+          )
+        })}
+      </section>
+
+      <section className="rounded-2xl border border-[#E8E2D8] bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-[#1C1714]">Stale - no movement in 14+ days</h2>
+          <span className="rounded-full bg-[#F5F4F2] px-2.5 py-1 text-xs font-semibold text-[#7A6F65]">{staleIdeas.length}</span>
+        </div>
+
+        {staleIdeas.length === 0 ? (
+          <p className="mt-3 rounded-lg border border-dashed border-[#E8E2D8] bg-[#FAFAF9] px-3 py-3 text-sm text-[#7A6F65]">
+            No stale ideas right now.
           </p>
-        </div>
-        <Button onClick={createIdea}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Idea
-        </Button>
-      </div>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {staleIdeas.map((idea) => (
+              <li key={idea.id} className="rounded-lg border border-[#E8E2D8] bg-[#FAFAF9] p-3">
+                <p className="text-sm font-semibold text-[#1C1714]">{idea.title}</p>
+                <p className="mt-1 text-xs text-[#7A6F65]">Updated {daysSince(idea.updated_at)} days ago</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    onClick={() => updateIdeaStatus(idea.id, 'brainstorm')}
+                    className="rounded-md border border-[#D0C8BE] bg-white px-2.5 py-1.5 text-xs font-medium text-[#7A6F65] transition-colors hover:border-[#C8620A] hover:text-[#C8620A]"
+                  >
+                    Keep
+                  </button>
+                  <button
+                    onClick={() => updateIdeaStatus(idea.id, 'archived')}
+                    className="rounded-md border border-[#E3C3C9] bg-white px-2.5 py-1.5 text-xs font-medium text-[#8F4A55] transition-colors hover:border-[#C05A69] hover:text-[#C05A69]"
+                  >
+                    Archive
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
-      {/* Status filters */}
-      <div className="flex gap-2">
+      <section className="rounded-2xl border border-[#E8E2D8] bg-white p-5 shadow-sm sm:p-6">
+        <p className="text-sm text-[#7A6F65]">
+          Archived ideas stay out of the active pipeline but remain available for review.
+        </p>
         <button
-          onClick={() => setFilter('all')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            filter === 'all'
-              ? 'bg-gray-900 text-white'
-              : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
-          }`}
+          type="button"
+          onClick={() => setShowArchived((current) => !current)}
+          className="mt-3 rounded-md border border-[#D0C8BE] bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-[#7A6F65] transition-colors hover:border-[#C8620A] hover:text-[#C8620A]"
         >
-          All ({ideas.length})
+          {showArchived ? 'Hide archived ideas' : 'Show archived ideas'}
         </button>
-        <button
-          onClick={() => setFilter('brainstorm')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            filter === 'brainstorm'
-              ? 'bg-gray-900 text-white'
-              : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
-          }`}
-        >
-          Brainstorm ({statusCounts.brainstorm})
-        </button>
-        <button
-          onClick={() => setFilter('research')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            filter === 'research'
-              ? 'bg-gray-900 text-white'
-              : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
-          }`}
-        >
-          Research ({statusCounts.research})
-        </button>
-        <button
-          onClick={() => setFilter('in_progress')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            filter === 'in_progress'
-              ? 'bg-gray-900 text-white'
-              : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
-          }`}
-        >
-          In Progress ({statusCounts.in_progress})
-        </button>
-        <button
-          onClick={() => setFilter('shipped')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            filter === 'shipped'
-              ? 'bg-gray-900 text-white'
-              : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
-          }`}
-        >
-          Shipped ({statusCounts.shipped})
-        </button>
-      </div>
 
-      {/* Ideas grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {filteredIdeas.map((idea) => (
-          <IdeaCard key={idea.id} idea={idea} />
-        ))}
-      </div>
-
-      {filteredIdeas.length === 0 && (
-        <div className="flex items-center justify-center py-12 text-gray-500">
-          No ideas in this status
-        </div>
-      )}
+        {showArchived ? (
+          archivedIdeas.length === 0 ? (
+            <p className="mt-3 rounded-lg border border-dashed border-[#E8E2D8] bg-[#FAFAF9] px-3 py-3 text-sm text-[#7A6F65]">
+              No archived ideas yet.
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {archivedIdeas.map((idea) => (
+                <li key={idea.id} className="rounded-lg border border-[#E8E2D8] bg-[#FAFAF9] p-3">
+                  <p className="text-sm font-semibold text-[#1C1714]">{idea.title}</p>
+                  <p className="mt-1 text-xs text-[#7A6F65]">Archived {formatDate(idea.updated_at)}</p>
+                  <button
+                    onClick={() => updateIdeaStatus(idea.id, 'brainstorm')}
+                    className="mt-2 rounded-md border border-[#D0C8BE] bg-white px-2.5 py-1.5 text-xs font-medium text-[#7A6F65] transition-colors hover:border-[#C8620A] hover:text-[#C8620A]"
+                  >
+                    Restore to Brainstorm
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : null}
+      </section>
     </div>
   )
 }
