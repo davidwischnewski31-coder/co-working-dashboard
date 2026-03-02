@@ -111,7 +111,7 @@ export function Sidebar({
           'transition-transform duration-300',
           isOpen ? 'translate-x-0' : '-translate-x-full',
           isIconOnlyDesktop ? 'lg:w-14' : 'lg:w-72',
-          board === 'a' ? 'border-r border-[#CBD4E1] bg-[rgba(242,247,255,0.92)]' : 'border-r border-[#E8D8BF] bg-[rgba(255,247,236,0.92)]'
+          board === 'a' ? 'border-r border-[#E8E2D8] bg-[rgba(250,249,247,0.94)]' : 'border-r border-[#E8D8BF] bg-[rgba(255,247,236,0.92)]'
         )}
       >
         <div className="mb-2 hidden justify-end lg:flex">
@@ -120,7 +120,7 @@ export function Sidebar({
             className={cn(
               'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors',
               board === 'a'
-                ? 'border-[#CBD4E1] bg-white text-[#415069] hover:bg-[#EEF3FA]'
+                ? 'border-[#E8E2D8] bg-white text-[#7A644F] hover:bg-[#FFF8EE]'
                 : 'border-[#E8D8BF] bg-white text-[#7A644F] hover:bg-[#FFF8EE]'
             )}
             aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -163,8 +163,8 @@ export function Sidebar({
                   isIconOnlyDesktop ? 'lg:justify-center lg:px-0' : '',
                   board === 'a'
                     ? active
-                      ? 'border-[#BFD1EB] bg-[#EAF2FF] text-[#1F365A]'
-                      : 'border-transparent text-[#415069] hover:border-[#CBD4E1] hover:bg-[#F5F9FF]'
+                      ? 'border-[#E2C79B] bg-[#FFF1DA] text-[#5B3A1C]'
+                      : 'border-transparent text-[#7A644F] hover:border-[#E8D8BF] hover:bg-[#FFF8EE]'
                     : active
                       ? 'border-[#E2C79B] bg-[#FFF1DA] text-[#5B3A1C]'
                       : 'border-transparent text-[#7A644F] hover:border-[#E8D8BF] hover:bg-[#FFF8EE]'
@@ -183,10 +183,10 @@ export function Sidebar({
         </nav>
 
         {board === 'a' && !isIconOnlyDesktop ? (
-          <div className="mt-6 rounded-2xl border border-[#CBD4E1] bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6A7892]">Mode</p>
-            <p className="mt-1 text-sm font-medium text-[#1A2433]">{theme.modeLabel}</p>
-            <p className="mt-2 text-xs text-[#6A7892]">{theme.modeDescription}</p>
+          <div className="mt-6 rounded-2xl border border-[#E8D8BF] bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7A644F]">Mode</p>
+            <p className="mt-1 text-sm font-medium text-[#3D2A18]">{theme.modeLabel}</p>
+            <p className="mt-2 text-xs text-[#7A644F]">{theme.modeDescription}</p>
           </div>
         ) : null}
 

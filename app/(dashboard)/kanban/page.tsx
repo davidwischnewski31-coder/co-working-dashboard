@@ -61,7 +61,7 @@ function KanbanBoardSkeleton() {
 }
 
 function KanbanPageContent() {
-  const { data, isReady, createTask, moveTask } = useWorkspace()
+  const { data, createTask, moveTask } = useWorkspace()
   const searchParams = useSearchParams()
 
   const [title, setTitle] = useState('')
@@ -189,17 +189,6 @@ function KanbanPageContent() {
 
   async function handleTaskMove(taskId: string, nextStatus: string) {
     moveTask(taskId, nextStatus as TaskStatus)
-  }
-
-  if (!isReady) {
-    return (
-      <div className="space-y-6 variant-page variant-page-kanban">
-        <JourneyPanel page="kanban" />
-        <section className="rounded-2xl border border-[#E8E2D8] bg-white p-4 shadow-sm">
-          <KanbanBoardSkeleton />
-        </section>
-      </div>
-    )
   }
 
   return (
