@@ -4,69 +4,202 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import {
-  LayoutDashboard,
-  KanbanSquare,
-  FolderOpen,
-  Lightbulb,
-  BookOpen,
   Activity,
-  Zap
+  BookOpen,
+  Bot,
+  Briefcase,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  History,
+  Inbox,
+  KanbanSquare,
+  Lightbulb,
+  ListChecks,
+  PanelLeftClose,
+  ShoppingBasket,
+  Sparkles,
 } from 'lucide-react'
+import { getDashboardTheme } from '@/lib/dashboardVariant'
 
-const navigation = [
-  { name: 'Overview', href: '/', icon: LayoutDashboard },
-  { name: 'V2 Dashboard', href: '/v2', icon: Zap },
-  { name: 'Kanban', href: '/kanban', icon: KanbanSquare },
-  { name: 'Projects', href: '/projects', icon: FolderOpen },
-  { name: 'Ideas', href: '/ideas', icon: Lightbulb },
-  { name: 'Reading', href: '/reading', icon: BookOpen },
-  { name: 'Activity', href: '/activity', icon: Activity },
+interface SidebarProps {
+  isOpen: boolean
+  onClose: () => void
+  isCollapsed: boolean
+  isDesktopExpanded: boolean
+  onHoverChange: (isHovering: boolean) => void
+  onToggleCollapse: () => void
+}
+
+type NavKey = 'overview' | 'kanban' | 'projects' | 'ideas' | 'reading' | 'activity'
+
+type NavItem = {
+  href: string
+  icon: React.ComponentType<{ className?: string }>
+  key?: NavKey
+  label?: string
+}
+
+const boardANavigation: NavItem[] = [
+  { key: 'overview', href: '/overview', icon: Sparkles },
+  { href: '/inbox', icon: Inbox, label: 'Inbox' },
+  { key: 'kanban', href: '/kanban', icon: KanbanSquare },
+  { key: 'projects', href: '/projects', icon: Briefcase },
+  { key: 'ideas', href: '/ideas', icon: Lightbulb },
+  { key: 'reading', href: '/reading', icon: BookOpen },
+  { key: 'activity', href: '/activity', icon: Activity },
+  { href: '/agent-log', icon: Bot, label: 'Agent Log' },
 ]
 
-export function Sidebar() {
+const boardBNavigation: NavItem[] = [
+  { href: '/shared', icon: Sparkles, label: 'Shared Hub' },
+  { href: '/shared/todos', icon: ListChecks, label: 'Todos' },
+  { href: '/shared/calendar', icon: CalendarDays, label: 'Calendar' },
+  { href: '/shared/shopping', icon: ShoppingBasket, label: 'Shopping' },
+  { href: '/shared/log', icon: History, label: 'Team Log' },
+]
+
+function isActivePath(pathname: string, href: string): boolean {
+  if (href === '/overview') {
+    return pathname === '/overview' || pathname === '/'
+  }
+
+  if (href === '/shared') {
+    return pathname === '/shared'
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`)
+}
+
+export function Sidebar({
+  isOpen,
+  onClose,
+  isCollapsed,
+  isDesktopExpanded,
+  onHoverChange,
+  onToggleCollapse,
+}: SidebarProps) {
   const pathname = usePathname()
+  const theme = getDashboardTheme()
+  const board = pathname.startsWith('/shared') ? 'b' : 'a'
+  const navigation = board === 'a' ? boardANavigation : boardBNavigation
+  const isIconOnlyDesktop = isCollapsed && !isDesktopExpanded
 
   return (
-    <div className="flex h-full w-64 flex-col bg-gray-50 border-r border-gray-200">
-      {/* Logo */}
-      <div className="flex h-16 items-center px-6 border-b border-gray-200">
-        <h1 className="text-xl font-semibold text-gray-900">Co-Working</h1>
-      </div>
+    <>
+      <div
+        onClick={onClose}
+        className={cn(
+          'fixed inset-0 z-30 bg-slate-900/45 transition-opacity lg:hidden',
+          isOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+        )}
+      />
 
-      {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-3 py-4">
-        {navigation.map((item) => {
-          const isActive = pathname === item.href
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={cn(
-                'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-gray-900 text-white'
-                  : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
-              )}
-            >
-              <item.icon className="h-5 w-5" />
-              {item.name}
-            </Link>
-          )
-        })}
-      </nav>
-
-      {/* Footer */}
-      <div className="border-t border-gray-200 p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-sm font-medium text-white">
-            D
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-medium text-gray-900">David</p>
-            <p className="text-xs text-gray-500">david@example.com</p>
-          </div>
+      <aside
+        onMouseEnter={() => {
+          if (isCollapsed) {
+            onHoverChange(true)
+          }
+        }}
+        onMouseLeave={() => {
+          if (isCollapsed) {
+            onHoverChange(false)
+          }
+        }}
+        className={cn(
+          'fixed inset-y-0 left-0 z-40 w-72 p-4 shadow-xl backdrop-blur lg:static lg:z-auto lg:block lg:translate-x-0 lg:shadow-none',
+          'transition-transform duration-300',
+          isOpen ? 'translate-x-0' : '-translate-x-full',
+          isIconOnlyDesktop ? 'lg:w-14' : 'lg:w-72',
+          board === 'a' ? 'border-r border-[#CBD4E1] bg-[rgba(242,247,255,0.92)]' : 'border-r border-[#E8D8BF] bg-[rgba(255,247,236,0.92)]'
+        )}
+      >
+        <div className="mb-2 hidden justify-end lg:flex">
+          <button
+            onClick={onToggleCollapse}
+            className={cn(
+              'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors',
+              board === 'a'
+                ? 'border-[#CBD4E1] bg-white text-[#415069] hover:bg-[#EEF3FA]'
+                : 'border-[#E8D8BF] bg-white text-[#7A644F] hover:bg-[#FFF8EE]'
+            )}
+            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            type="button"
+          >
+            {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </button>
         </div>
-      </div>
-    </div>
+
+        <div className={cn('mb-6 flex items-start justify-between px-1', isIconOnlyDesktop ? 'lg:hidden' : '')}>
+          <div>
+            <p className="text-[9px] uppercase tracking-[0.24em] text-[#7A6F65]">
+              {board === 'a' ? 'Board A' : 'Board B'}
+            </p>
+            <h1 className="mt-1 text-sm font-semibold text-[#1C1714]">
+              {board === 'a' ? 'Execution OS' : 'Shared Space'}
+            </h1>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-md p-2 text-white/90 hover:bg-white/20 lg:hidden"
+            aria-label="Close navigation"
+          >
+            <PanelLeftClose className="h-5 w-5" />
+          </button>
+        </div>
+
+        <nav className="space-y-2">
+          {navigation.map((item) => {
+            const active = isActivePath(pathname, item.href)
+            const label = item.key ? theme.navLabels[item.key] : item.label
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onClose}
+                className={cn(
+                  'group relative flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-medium transition-all',
+                  isIconOnlyDesktop ? 'lg:justify-center lg:px-0' : '',
+                  board === 'a'
+                    ? active
+                      ? 'border-[#BFD1EB] bg-[#EAF2FF] text-[#1F365A]'
+                      : 'border-transparent text-[#415069] hover:border-[#CBD4E1] hover:bg-[#F5F9FF]'
+                    : active
+                      ? 'border-[#E2C79B] bg-[#FFF1DA] text-[#5B3A1C]'
+                      : 'border-transparent text-[#7A644F] hover:border-[#E8D8BF] hover:bg-[#FFF8EE]'
+                )}
+              >
+                <item.icon className={cn('h-4 w-4', active ? 'opacity-100' : 'opacity-75')} />
+                <span className={cn(isIconOnlyDesktop ? 'lg:hidden' : '')}>{label}</span>
+                {isIconOnlyDesktop ? (
+                  <span className="pointer-events-none absolute left-12 top-1/2 hidden -translate-y-1/2 whitespace-nowrap rounded-md border border-[#D6CCC0] bg-white px-2 py-1 text-xs text-[#3D2A18] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 lg:block">
+                    {label}
+                  </span>
+                ) : null}
+              </Link>
+            )
+          })}
+        </nav>
+
+        {board === 'a' && !isIconOnlyDesktop ? (
+          <div className="mt-6 rounded-2xl border border-[#CBD4E1] bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6A7892]">Mode</p>
+            <p className="mt-1 text-sm font-medium text-[#1A2433]">{theme.modeLabel}</p>
+            <p className="mt-2 text-xs text-[#6A7892]">{theme.modeDescription}</p>
+          </div>
+        ) : null}
+
+        {board === 'b' && !isIconOnlyDesktop ? (
+          <div className="mt-6 rounded-2xl border border-[#E8D8BF] bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7A644F]">Shared Rules</p>
+            <p className="mt-1 text-sm font-medium text-[#3D2A18]">Full access for both of you</p>
+            <p className="mt-2 text-xs text-[#7A644F]">
+              Every shared todo, calendar, and shopping update is visible in Team Log.
+            </p>
+          </div>
+        ) : null}
+      </aside>
+    </>
   )
 }
