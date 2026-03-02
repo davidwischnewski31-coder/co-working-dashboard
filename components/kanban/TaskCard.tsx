@@ -2,104 +2,104 @@
 
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { AttributionBadge } from './AttributionBadge'
 import { Calendar, Tag } from 'lucide-react'
+import { AttributionBadge } from './AttributionBadge'
 import { formatDate } from '@/lib/utils'
-import type { Task } from '@/lib/validations'
+import type { TaskPriority, WorkspaceTask } from '@/lib/workspace'
 
 interface TaskCardProps {
-  task: Task & { project_name?: string; project_color?: string }
+  task: WorkspaceTask & {
+    project_name?: string
+    project_color?: string
+  }
+}
+
+const priorityColors: Record<TaskPriority, string> = {
+  low: 'bg-[#F5F4F2] text-[#7A6F65]',
+  medium: 'bg-blue-100 text-blue-700',
+  high: 'bg-orange-100 text-orange-700',
+  urgent: 'bg-red-100 text-red-700',
 }
 
 export function TaskCard({ task }: TaskCardProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: task.id })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+  })
+  const isOverdue =
+    Boolean(task.due_date) &&
+    task.status !== 'done' &&
+    new Date(task.due_date as string).getTime() < Date.now()
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
-  }
-
-  const priorityColors = {
-    low: 'bg-gray-100 text-gray-700',
-    medium: 'bg-blue-100 text-blue-700',
-    high: 'bg-orange-100 text-orange-700',
-    urgent: 'bg-red-100 text-red-700',
+    opacity: isDragging ? 0.55 : 1,
   }
 
   return (
-    <div
+    <article
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
-      className="group cursor-grab active:cursor-grabbing rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow"
+      className={`cursor-grab rounded-lg border border-[#e6dbc8] bg-white p-3 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing ${
+        isOverdue ? 'border-l-4 border-l-red-400' : ''
+      }`}
     >
-      <div className="space-y-3">
-        {/* Title */}
-        <h4 className="font-medium text-gray-900 leading-snug">{task.title}</h4>
-
-        {/* Description (if present) */}
-        {task.description && (
-          <p className="text-sm text-gray-600 line-clamp-2">{task.description}</p>
-        )}
-
-        {/* Project Badge */}
-        {task.project_name && (
-          <div className="flex items-center gap-2">
-            <div
-              className="h-2 w-2 rounded-full"
-              style={{ backgroundColor: task.project_color || '#6B7280' }}
-            />
-            <span className="text-xs text-gray-500">{task.project_name}</span>
-          </div>
-        )}
-
-        {/* Tags */}
-        {task.tags && task.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {task.tags.map((tag, index) => (
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${priorityColors[task.priority]}`}>
+            {task.priority}
+          </span>
+          {task.project_name ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#F5F4F2] px-2 py-0.5 text-xs text-[#7A6F65]">
               <span
-                key={index}
-                className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-600"
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: task.project_color || '#64748b' }}
+              />
+              {task.project_name}
+            </span>
+          ) : null}
+        </div>
+
+        <h4 className="text-sm font-semibold leading-snug text-slate-900">{task.title}</h4>
+
+        {task.description ? <p className="text-xs text-[#7A6F65]">{task.description}</p> : null}
+
+        {task.tags.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {task.tags.map((tag) => (
+              <span
+                key={`${task.id}-${tag}`}
+                className="inline-flex items-center gap-1 rounded-md bg-[#f7f1e5] px-2 py-0.5 text-xs text-[#7A6F65]"
               >
                 <Tag className="h-3 w-3" />
                 {tag}
               </span>
             ))}
           </div>
-        )}
+        ) : null}
 
-        {/* Footer */}
-        <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-          {/* Attribution */}
-          <AttributionBadge
-            owner={task.owner}
-            ownerType={task.owner_type}
-            metadata={task.agent_metadata}
-          />
+        <div className="flex items-center justify-between border-t border-[#efe4d3] pt-2">
+          <AttributionBadge owner={task.owner} ownerType={task.owner_type} />
+          {task.due_date ? (
+            <span className={`inline-flex items-center gap-1 text-xs ${isOverdue ? 'text-red-700' : 'text-slate-500'}`}>
+              <Calendar className="h-3 w-3" />
+              {formatDate(task.due_date)}
+            </span>
+          ) : (
+            <span className="text-xs text-slate-400">No due date</span>
+          )}
+        </div>
 
-          {/* Priority & Due Date */}
-          <div className="flex items-center gap-2">
-            {task.due_date && (
-              <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-                <Calendar className="h-3 w-3" />
-                {formatDate(task.due_date)}
-              </span>
-            )}
-            <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${priorityColors[task.priority]}`}>
-              {task.priority}
+        {isOverdue ? (
+          <div className="pt-1">
+            <span className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-red-700">
+              Overdue
             </span>
           </div>
-        </div>
+        ) : null}
       </div>
-    </div>
+    </article>
   )
 }
