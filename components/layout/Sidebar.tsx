@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
   Activity,
@@ -9,17 +10,23 @@ import {
   Bot,
   Briefcase,
   CalendarDays,
+  ClipboardCheck,
+  ClipboardList,
   ChevronLeft,
   ChevronRight,
   History,
   Inbox,
   KanbanSquare,
   Lightbulb,
+  LayoutGrid,
   ListChecks,
   PanelLeftClose,
   ShoppingBasket,
   Sparkles,
+  NotebookPen,
+  SunMoon,
 } from 'lucide-react'
+import { useWorkspace } from '@/components/providers/WorkspaceProvider'
 import { getDashboardTheme } from '@/lib/dashboardVariant'
 
 interface SidebarProps {
@@ -42,12 +49,16 @@ type NavItem = {
 
 const boardANavigation: NavItem[] = [
   { key: 'overview', href: '/overview', icon: Sparkles },
+  { href: '/capture', icon: NotebookPen, label: 'Capture' },
   { href: '/inbox', icon: Inbox, label: 'Inbox' },
   { key: 'kanban', href: '/kanban', icon: KanbanSquare },
   { key: 'projects', href: '/projects', icon: Briefcase },
   { key: 'ideas', href: '/ideas', icon: Lightbulb },
   { key: 'reading', href: '/reading', icon: BookOpen },
   { key: 'activity', href: '/activity', icon: Activity },
+  { href: '/decisions', icon: ClipboardList, label: 'Decisions' },
+  { href: '/daily', icon: SunMoon, label: 'Daily Workflow' },
+  { href: '/weekly-review', icon: ClipboardCheck, label: 'Weekly Review' },
   { href: '/agent-log', icon: Bot, label: 'Agent Log' },
 ]
 
@@ -80,10 +91,13 @@ export function Sidebar({
   onToggleCollapse,
 }: SidebarProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const theme = getDashboardTheme()
+  const { isAgentRunning } = useWorkspace()
   const board = pathname.startsWith('/shared') ? 'b' : 'a'
   const navigation = board === 'a' ? boardANavigation : boardBNavigation
   const isIconOnlyDesktop = isCollapsed && !isDesktopExpanded
+  const [switcherOpen, setSwitcherOpen] = useState(false)
 
   return (
     <>
@@ -130,22 +144,72 @@ export function Sidebar({
           </button>
         </div>
 
-        <div className={cn('mb-6 flex items-start justify-between px-1', isIconOnlyDesktop ? 'lg:hidden' : '')}>
-          <div>
-            <p className="text-[9px] uppercase tracking-[0.24em] text-[#7A6F65]">
-              {board === 'a' ? 'Board A' : 'Board B'}
-            </p>
-            <h1 className="mt-1 text-sm font-semibold text-[#1C1714]">
-              {board === 'a' ? 'Execution OS' : 'Shared Space'}
-            </h1>
+        <div className={cn('relative mb-6 px-1', isIconOnlyDesktop ? 'lg:hidden' : '')}>
+          <div className="flex items-start justify-between">
+            <button
+              type="button"
+              onClick={() => setSwitcherOpen((v) => !v)}
+              className="group flex w-full flex-col rounded-xl border border-[#E8D8BF] bg-white px-3 py-2.5 text-left shadow-sm transition-colors hover:bg-[#FFF8EE]"
+            >
+              <p className="text-[10px] uppercase tracking-[0.2em] text-[#7A6F65]">
+                {board === 'a' ? 'Board A' : 'Board B'}
+                <LayoutGrid className="ml-1.5 inline-block h-3 w-3 opacity-50 group-hover:opacity-100" />
+              </p>
+              <h1 className="mt-1 text-base font-semibold text-[#1C1714]">
+                {board === 'a' ? 'Execution OS' : 'Life OS'}
+              </h1>
+              <p className="mt-1 text-[11px] text-[#7A6F65]">Switch board</p>
+            </button>
+            <button
+              onClick={onClose}
+              className="rounded-md p-2 text-white/90 hover:bg-white/20 lg:hidden"
+              aria-label="Close navigation"
+            >
+              <PanelLeftClose className="h-5 w-5" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-md p-2 text-white/90 hover:bg-white/20 lg:hidden"
-            aria-label="Close navigation"
-          >
-            <PanelLeftClose className="h-5 w-5" />
-          </button>
+
+          {switcherOpen ? (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setSwitcherOpen(false)} />
+              <div className="absolute left-0 top-full z-20 mt-2 w-56 overflow-hidden rounded-xl border border-[#E8E2D8] bg-white shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    router.push('/overview')
+                    setSwitcherOpen(false)
+                  }}
+                  className={cn(
+                    'flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-[#FFF8EE]',
+                    board === 'a' ? 'bg-[#FFF1DA]' : ''
+                  )}
+                >
+                  <div className="mt-1 h-2.5 w-2.5 rounded-full bg-[#C8620A]" />
+                  <div>
+                    <p className="text-sm font-semibold text-[#1C1714]">Board A</p>
+                    <p className="text-xs text-[#7A6F65]">Execution OS</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    router.push('/shared')
+                    setSwitcherOpen(false)
+                  }}
+                  className={cn(
+                    'flex w-full items-start gap-3 border-t border-[#E8E2D8] px-4 py-3.5 text-left transition-colors hover:bg-[#FFF8EE]',
+                    board === 'b' ? 'bg-[#FFF1DA]' : ''
+                  )}
+                >
+                  <div className="mt-1 h-2.5 w-2.5 rounded-full bg-[#7A6F65]" />
+                  <div>
+                    <p className="text-sm font-semibold text-[#1C1714]">Board B</p>
+                    <p className="text-xs text-[#7A6F65]">Life OS</p>
+                  </div>
+                </button>
+              </div>
+            </>
+          ) : null}
         </div>
 
         <nav className="space-y-2">
@@ -170,7 +234,12 @@ export function Sidebar({
                       : 'border-transparent text-[#7A644F] hover:border-[#E8D8BF] hover:bg-[#FFF8EE]'
                 )}
               >
-                <item.icon className={cn('h-4 w-4', active ? 'opacity-100' : 'opacity-75')} />
+                <span className="relative inline-flex">
+                  <item.icon className={cn('h-4 w-4', active ? 'opacity-100' : 'opacity-75')} />
+                  {item.href === '/agent-log' && isAgentRunning ? (
+                    <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                  ) : null}
+                </span>
                 <span className={cn(isIconOnlyDesktop ? 'lg:hidden' : '')}>{label}</span>
                 {isIconOnlyDesktop ? (
                   <span className="pointer-events-none absolute left-12 top-1/2 hidden -translate-y-1/2 whitespace-nowrap rounded-md border border-[#D6CCC0] bg-white px-2 py-1 text-xs text-[#3D2A18] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 lg:block">
@@ -192,8 +261,8 @@ export function Sidebar({
 
         {board === 'b' && !isIconOnlyDesktop ? (
           <div className="mt-6 rounded-2xl border border-[#E8D8BF] bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7A644F]">Shared Rules</p>
-            <p className="mt-1 text-sm font-medium text-[#3D2A18]">Full access for both of you</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7A644F]">Life OS</p>
+            <p className="mt-1 text-sm font-medium text-[#3D2A18]">Shared space for two</p>
             <p className="mt-2 text-xs text-[#7A644F]">
               Every shared todo, calendar, and shopping update is visible in Team Log.
             </p>

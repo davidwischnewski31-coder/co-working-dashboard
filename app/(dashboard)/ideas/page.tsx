@@ -1,11 +1,12 @@
 'use client'
 
 import { JourneyPanel } from '@/components/variant/JourneyPanel'
+import Link from 'next/link'
 
 import { useMemo, useState } from 'react'
 import { ArrowRight, Lightbulb, Plus } from 'lucide-react'
 import { useWorkspace } from '@/components/providers/WorkspaceProvider'
-import { formatDate } from '@/lib/utils'
+import { formatDate, formatDaysInStatus } from '@/lib/utils'
 import type { IdeaCategory, IdeaStatus, OwnerType, WorkspaceIdea } from '@/lib/workspace'
 
 const STATUS_ORDER: Array<Exclude<IdeaStatus, 'archived'>> = ['brainstorm', 'research', 'in_progress', 'shipped']
@@ -47,7 +48,7 @@ function daysSince(updatedAt: string): number {
 }
 
 export default function IdeasPage() {
-  const { data, createIdea, updateIdeaStatus } = useWorkspace()
+  const { data, createIdea, createTask, updateIdeaStatus } = useWorkspace()
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -56,6 +57,8 @@ export default function IdeasPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | IdeaStatus>('all')
   const [showArchived, setShowArchived] = useState(false)
   const [formExpanded, setFormExpanded] = useState(false)
+  const [taskPromptIdea, setTaskPromptIdea] = useState<WorkspaceIdea | null>(null)
+  const [whyNow, setWhyNow] = useState('')
 
   const activeIdeas = useMemo(() => data.ideas.filter((idea) => idea.status !== 'archived'), [data.ideas])
   const archivedIdeas = useMemo(() => data.ideas.filter((idea) => idea.status === 'archived'), [data.ideas])
@@ -107,6 +110,21 @@ export default function IdeasPage() {
     setCategory('product')
     setOwnerType('human')
     setFormExpanded(false)
+  }
+
+  function handleAdvanceIdea(idea: WorkspaceIdea) {
+    const nextStatus = nextIdeaStatus(idea.status)
+    if (nextStatus === idea.status) {
+      return
+    }
+
+    if (idea.status === 'research' && nextStatus === 'in_progress') {
+      setTaskPromptIdea(idea)
+      setWhyNow('')
+      return
+    }
+
+    updateIdeaStatus(idea.id, nextStatus)
   }
 
   return (
@@ -282,10 +300,21 @@ export default function IdeasPage() {
                       </span>
                     </div>
 
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Link href="/kanban" className="rounded-md border border-[#E8E2D8] bg-white px-2 py-1 text-[11px] font-semibold text-[#7A6F65] transition-colors hover:border-[#C8620A] hover:text-[#C8620A]">
+                        Open Kanban
+                      </Link>
+                      <Link href="/projects" className="rounded-md border border-[#E8E2D8] bg-white px-2 py-1 text-[11px] font-semibold text-[#7A6F65] transition-colors hover:border-[#C8620A] hover:text-[#C8620A]">
+                        Open Projects
+                      </Link>
+                    </div>
+
                     <div className="mt-3 flex items-center justify-between gap-2">
-                      <span className="text-[11px] text-[#7A6F65]">Updated {formatDate(idea.updated_at)}</span>
+                      <span className="text-[11px] text-[#7A6F65]">
+                        Updated {formatDate(idea.updated_at)} · {formatDaysInStatus(idea.updated_at)}
+                      </span>
                       <button
-                        onClick={() => updateIdeaStatus(idea.id, nextIdeaStatus(idea.status))}
+                        onClick={() => handleAdvanceIdea(idea)}
                         disabled={idea.status === 'shipped'}
                         className="inline-flex items-center gap-1 rounded-md border border-[#D0C8BE] bg-white px-2.5 py-1.5 text-xs font-medium text-[#7A6F65] transition-colors hover:border-[#C8620A] hover:text-[#C8620A] disabled:cursor-not-allowed disabled:opacity-40"
                       >
@@ -372,6 +401,78 @@ export default function IdeasPage() {
           )
         ) : null}
       </section>
+
+      {taskPromptIdea ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close create task prompt"
+            className="fixed inset-0 z-30 bg-black/20"
+            onClick={() => {
+              updateIdeaStatus(taskPromptIdea.id, 'in_progress')
+              setTaskPromptIdea(null)
+              setWhyNow('')
+            }}
+          />
+          <div className="fixed inset-x-4 top-24 z-40 mx-auto w-full max-w-lg rounded-2xl border border-[#E8E2D8] bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-semibold text-[#1C1714]">Create task from idea?</h3>
+            <p className="mt-1 text-sm text-[#7A6F65]">
+              This idea is now in progress. Create a task so it lands directly in execution.
+            </p>
+            <p className="mt-2 rounded-lg bg-[#FAFAF9] px-3 py-2 text-sm font-medium text-[#1C1714]">
+              {taskPromptIdea.title}
+            </p>
+            <label className="mt-3 block">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">
+                Why now? <span className="font-normal normal-case">(optional)</span>
+              </span>
+              <textarea
+                value={whyNow}
+                onChange={(event) => setWhyNow(event.target.value)}
+                placeholder="What makes this the right moment to start?"
+                rows={2}
+                className="mt-1 w-full resize-none rounded-xl border border-[#E8E2D8] bg-[#FAFAF9] px-3 py-2.5 text-sm text-[#1C1714] outline-none transition focus:border-[#C8620A]"
+              />
+            </label>
+            <div className="mt-4 flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const due = new Date()
+                  due.setDate(due.getDate() + 7)
+                  createTask({
+                    title: taskPromptIdea.title,
+                    description: [taskPromptIdea.description ?? 'Created from ideas pipeline.', whyNow.trim() ? `Why now: ${whyNow.trim()}` : '']
+                      .filter(Boolean)
+                      .join('\n\n'),
+                    priority: 'high',
+                    owner_type: taskPromptIdea.owner_type,
+                    due_date: due.toISOString(),
+                    tags: ['idea', 'in-progress'],
+                  })
+                  updateIdeaStatus(taskPromptIdea.id, 'in_progress')
+                  setTaskPromptIdea(null)
+                  setWhyNow('')
+                }}
+                className="rounded-lg bg-[#C8620A] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#A04D06]"
+                type="button"
+              >
+                Create task
+              </button>
+              <button
+                onClick={() => {
+                  updateIdeaStatus(taskPromptIdea.id, 'in_progress')
+                  setTaskPromptIdea(null)
+                  setWhyNow('')
+                }}
+                className="rounded-lg border border-[#E8E2D8] bg-white px-3 py-2 text-sm font-semibold text-[#7A644F] transition-colors hover:border-[#D0C8BE]"
+                type="button"
+              >
+                Not yet
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
     </div>
   )
 }

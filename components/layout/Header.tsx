@@ -16,6 +16,7 @@ function titleForPath(pathname: string): string {
   if (pathname.startsWith('/agent-log')) return 'Agent Log'
   if (pathname.startsWith('/kanban')) return 'Task Board'
   if (pathname.startsWith('/projects')) return 'Projects'
+  if (pathname.startsWith('/people')) return 'People'
   if (pathname.startsWith('/ideas')) return 'Ideas'
   if (pathname.startsWith('/reading')) return 'Reading'
   if (pathname.startsWith('/activity')) return 'Activity'
@@ -41,7 +42,9 @@ export function Header({ onOpenSidebar }: HeaderProps) {
     day: 'numeric',
     timeZone: 'UTC',
   })
-  const showBoardToggle = process.env.NODE_ENV === 'development'
+  const showBoardToggle =
+    process.env.NODE_ENV === 'development' &&
+    process.env.NEXT_PUBLIC_SHOW_BOARD_TOGGLE === '1'
 
   function handleReset() {
     if (!window.confirm('Reset demo data and lose your current workspace changes?')) {

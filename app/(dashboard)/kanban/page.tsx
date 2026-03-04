@@ -7,6 +7,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Filter, Plus, Target } from 'lucide-react'
 import { useWorkspace } from '@/components/providers/WorkspaceProvider'
+import { formatDaysInStatus } from '@/lib/utils'
 import type { OwnerType, TaskPriority, TaskStatus, WorkspaceTask } from '@/lib/workspace'
 
 const ClientKanbanBoard = dynamic(
@@ -22,6 +23,8 @@ type TaskBoardItem = WorkspaceTask & {
   project_color?: string
 }
 
+type SavedView = 'custom' | 'today' | 'blocked' | 'ai_owned' | 'due_week'
+
 const priorityOrder: Record<TaskPriority, number> = {
   urgent: 4,
   high: 3,
@@ -34,6 +37,21 @@ const priorityClasses: Record<TaskPriority, string> = {
   high: 'bg-orange-100 text-orange-800',
   medium: 'bg-blue-100 text-blue-800',
   low: 'bg-[#F5F4F2] text-[#7A6F65]',
+}
+
+const SAVED_VIEWS: Array<{ id: Exclude<SavedView, 'custom'>; label: string }> = [
+  { id: 'today', label: 'Today' },
+  { id: 'blocked', label: 'Blocked' },
+  { id: 'ai_owned', label: 'AI-owned' },
+  { id: 'due_week', label: 'Due this week' },
+]
+
+function isSameDay(left: Date, right: Date): boolean {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  )
 }
 
 function KanbanBoardSkeleton() {
@@ -75,12 +93,16 @@ function KanbanPageContent() {
   const [ownerFilter, setOwnerFilter] = useState<'all' | OwnerType>('all')
   const [projectFilter, setProjectFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | TaskStatus>('all')
+  const [savedView, setSavedView] = useState<SavedView>('custom')
+  const [closureTaskId, setClosureTaskId] = useState<string | null>(null)
+  const [closureNote, setClosureNote] = useState('')
 
   const projectParam = searchParams.get('project')
   const statusParam = searchParams.get('status')
 
   useEffect(() => {
     setProjectFilter(projectParam ?? 'all')
+    setSavedView('custom')
   }, [projectParam])
 
   useEffect(() => {
@@ -96,6 +118,7 @@ function KanbanPageContent() {
     }
 
     setStatusFilter('all')
+    setSavedView('custom')
   }, [statusParam])
 
   const tasks = useMemo<TaskBoardItem[]>(() => {
@@ -110,10 +133,41 @@ function KanbanPageContent() {
   }, [data.projects, data.tasks])
 
   const filteredTasks = useMemo(() => {
+    const now = new Date()
+    const todayStart = new Date(now)
+    todayStart.setHours(0, 0, 0, 0)
+    const weekEnd = new Date(now)
+    weekEnd.setDate(weekEnd.getDate() + 7)
+
     return tasks
       .filter((task) => (ownerFilter === 'all' ? true : task.owner_type === ownerFilter))
       .filter((task) => (projectFilter === 'all' ? true : task.project_id === projectFilter))
       .filter((task) => (statusFilter === 'all' ? true : task.status === statusFilter))
+      .filter((task) => {
+        if (savedView === 'custom') {
+          return true
+        }
+
+        if (savedView === 'blocked') {
+          return task.status === 'blocked'
+        }
+
+        if (savedView === 'ai_owned') {
+          return task.owner_type === 'agent' && task.status !== 'done'
+        }
+
+        if (!task.due_date || task.status === 'done') {
+          return false
+        }
+
+        const dueDate = new Date(task.due_date)
+
+        if (savedView === 'today') {
+          return isSameDay(dueDate, now)
+        }
+
+        return dueDate >= todayStart && dueDate <= weekEnd
+      })
       .sort((left, right) => {
         const statusScore = left.status === 'done' ? 1 : 0
         const rightStatusScore = right.status === 'done' ? 1 : 0
@@ -122,7 +176,7 @@ function KanbanPageContent() {
         }
         return priorityOrder[right.priority] - priorityOrder[left.priority]
       })
-  }, [ownerFilter, projectFilter, statusFilter, tasks])
+  }, [ownerFilter, projectFilter, savedView, statusFilter, tasks])
 
   const focusTasks = useMemo(
     () => filteredTasks.filter((task) => task.status !== 'done').slice(0, 4),
@@ -156,10 +210,32 @@ function KanbanPageContent() {
 
   function handleMarkDone(taskId: string) {
     moveTask(taskId, 'done')
+    setClosureTaskId(taskId)
+    setClosureNote('')
   }
 
   function handleMarkBlocked(taskId: string) {
     moveTask(taskId, 'blocked')
+  }
+
+  function applySavedView(view: Exclude<SavedView, 'custom'>) {
+    setSavedView(view)
+    setProjectFilter('all')
+
+    if (view === 'blocked') {
+      setOwnerFilter('all')
+      setStatusFilter('blocked')
+      return
+    }
+
+    if (view === 'ai_owned') {
+      setOwnerFilter('agent')
+      setStatusFilter('all')
+      return
+    }
+
+    setOwnerFilter('all')
+    setStatusFilter('all')
   }
 
   function handleCreateTask(event: React.FormEvent<HTMLFormElement>) {
@@ -191,6 +267,12 @@ function KanbanPageContent() {
     moveTask(taskId, nextStatus as TaskStatus)
   }
 
+  useEffect(() => {
+    if (!closureTaskId) return
+    const t = window.setTimeout(() => setClosureTaskId(null), 10000)
+    return () => window.clearTimeout(t)
+  }, [closureTaskId])
+
   return (
     <div className="space-y-6 variant-page variant-page-kanban">
       <JourneyPanel page="kanban" />
@@ -202,8 +284,9 @@ function KanbanPageContent() {
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#7A6F65]">Now — Primary Task</p>
               <h2 className="text-xl font-semibold text-[#1C1714] sm:text-2xl">{primaryTask.title}</h2>
               {primaryTask.description && (
-                <p className="text-sm text-[#7A6F65]">{primaryTask.description}</p>
+                <p className="text-sm text-[#5F4E3D]">{primaryTask.description}</p>
               )}
+              <p className="text-xs text-[#8A7C70]">{formatDaysInStatus(primaryTask.updated_at)}</p>
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${priorityClasses[primaryTask.priority]}`}>
                   {primaryTask.priority}
@@ -229,7 +312,7 @@ function KanbanPageContent() {
               <div className="flex flex-wrap justify-end gap-2">
                 <button
                   onClick={() => handleStart(primaryTask.id)}
-                  className="rounded-xl border border-[#E8E2D8] bg-white px-4 py-2 text-sm font-semibold text-[#7A6F65] transition-colors hover:bg-[#FAFAF9]"
+                  className="rounded-xl border border-[#E8E2D8] bg-white px-4 py-2 text-sm font-semibold text-[#3D2A18] transition-colors hover:bg-[#F6EFE4]"
                 >
                   Start
                 </button>
@@ -242,7 +325,7 @@ function KanbanPageContent() {
               </div>
               <button
                 onClick={() => handleMarkBlocked(primaryTask.id)}
-                className="mt-2 text-xs text-[#7A6F65] underline-offset-2 transition-colors hover:text-red-700 hover:underline"
+                className="mt-2 text-xs text-[#5F4E3D] underline-offset-2 transition-colors hover:text-red-700 hover:underline"
               >
                 I&apos;m blocked
               </button>
@@ -253,17 +336,17 @@ function KanbanPageContent() {
 
       <section
         className={`rounded-2xl border border-[#E8E2D8] p-5 sm:p-6 ${
-          primaryTask ? 'bg-[#FFFDF8] shadow-none' : 'bg-white shadow-sm'
+          primaryTask ? 'bg-white shadow-sm' : 'bg-white shadow-sm'
         }`}
       >
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-[#1C1714] sm:text-2xl">Task Board</h1>
-            <p className="mt-1 text-sm text-[#7A6F65]">
+            <p className="mt-1 text-sm text-[#5F4E3D]">
               Capture quickly, prioritize clearly, and move work from chaos to done.
             </p>
           </div>
-          <div className="hidden rounded-xl border border-[#E8E2D8] bg-[#FAFAF9] px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#7A6F65] sm:block">
+          <div className="hidden rounded-xl border border-[#E8E2D8] bg-[#F7F1E8] px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#5F4E3D] sm:block">
             Local-first mode
           </div>
         </div>
@@ -272,7 +355,7 @@ function KanbanPageContent() {
           <button
             type="button"
             onClick={() => setFormExpanded(true)}
-            className="flex w-full items-center gap-2 rounded-xl border border-dashed border-[#E8E2D8] px-4 py-3 text-sm text-[#7A6F65] transition-colors hover:border-[#C8620A] hover:text-[#C8620A]"
+            className="flex w-full items-center gap-2 rounded-xl border border-dashed border-[#E8E2D8] px-4 py-3 text-sm text-[#5F4E3D] transition-colors hover:border-[#C8620A] hover:text-[#C8620A]"
           >
             <Plus className="h-4 w-4" />
             Add a task...
@@ -374,7 +457,7 @@ function KanbanPageContent() {
               <button
                 type="button"
                 onClick={() => setFormExpanded(false)}
-                className="text-sm text-[#7A6F65] hover:text-[#1C1714]"
+                className="text-sm text-[#5F4E3D] hover:text-[#1C1714]"
               >
                 Cancel
               </button>
@@ -386,15 +469,47 @@ function KanbanPageContent() {
       <section className="grid gap-6 xl:grid-cols-[1.2fr_320px]">
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#E8E2D8] bg-white p-4 shadow-sm">
-            <span className="inline-flex items-center gap-2 rounded-lg bg-[#F5F4F2] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">
+            <span className="inline-flex items-center gap-2 rounded-lg bg-[#F7F1E8] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#5F4E3D]">
               <Filter className="h-3.5 w-3.5" />
               Filters
             </span>
 
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">Saved views</span>
+              {SAVED_VIEWS.map((view) => (
+                <button
+                  key={view.id}
+                  type="button"
+                  onClick={() => applySavedView(view.id)}
+                  className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                    savedView === view.id
+                      ? 'border-[#E2C79B] bg-[#FFF1DA] text-[#5B3A1C]'
+                      : 'border-[#E8E2D8] bg-white text-[#7A6F65] hover:border-[#D0C8BE]'
+                  }`}
+                >
+                  {view.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setSavedView('custom')}
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                  savedView === 'custom'
+                    ? 'border-[#E2C79B] bg-[#FFF1DA] text-[#5B3A1C]'
+                    : 'border-[#E8E2D8] bg-white text-[#7A6F65] hover:border-[#D0C8BE]'
+                }`}
+              >
+                Custom
+              </button>
+            </div>
+
             <select
               value={ownerFilter}
-              onChange={(event) => setOwnerFilter(event.target.value as 'all' | OwnerType)}
-              className="rounded-lg border border-[#E8E2D8] bg-white px-3 py-2 text-sm text-[#7A6F65]"
+              onChange={(event) => {
+                setOwnerFilter(event.target.value as 'all' | OwnerType)
+                setSavedView('custom')
+              }}
+              className="rounded-lg border border-[#E8E2D8] bg-white px-3 py-2 text-sm text-[#3D2A18]"
             >
               <option value="all">All owners</option>
               <option value="human">David only</option>
@@ -403,8 +518,11 @@ function KanbanPageContent() {
 
             <select
               value={projectFilter}
-              onChange={(event) => setProjectFilter(event.target.value)}
-              className="rounded-lg border border-[#E8E2D8] bg-white px-3 py-2 text-sm text-[#7A6F65]"
+              onChange={(event) => {
+                setProjectFilter(event.target.value)
+                setSavedView('custom')
+              }}
+              className="rounded-lg border border-[#E8E2D8] bg-white px-3 py-2 text-sm text-[#3D2A18]"
             >
               <option value="all">All projects</option>
               {data.projects.map((project) => (
@@ -416,8 +534,11 @@ function KanbanPageContent() {
 
             <select
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as 'all' | TaskStatus)}
-              className="rounded-lg border border-[#E8E2D8] bg-white px-3 py-2 text-sm text-[#7A6F65]"
+              onChange={(event) => {
+                setStatusFilter(event.target.value as 'all' | TaskStatus)
+                setSavedView('custom')
+              }}
+              className="rounded-lg border border-[#E8E2D8] bg-white px-3 py-2 text-sm text-[#3D2A18]"
             >
               <option value="all">All statuses</option>
               <option value="backlog">Backlog</option>
@@ -427,7 +548,7 @@ function KanbanPageContent() {
               <option value="done">Done</option>
             </select>
 
-            <p className="text-sm text-[#7A6F65]">
+            <p className="text-sm text-[#5F4E3D]">
               <span className="font-semibold text-[#1C1714]">{activeTaskCount}</span> active •{' '}
               <span className="font-semibold text-[#1C1714]">{doneTaskCount}</span> done
             </p>
@@ -437,7 +558,7 @@ function KanbanPageContent() {
             {data.tasks.length === 0 ? (
               <div className="flex min-h-[360px] flex-col items-center justify-center rounded-xl border border-dashed border-[#E8E2D8] bg-[#FAFAF9] px-6 text-center">
                 <p className="text-base font-semibold text-[#1C1714]">No tasks yet</p>
-                <p className="mt-1 text-sm text-[#7A6F65]">Your board is empty. Start by adding the first task.</p>
+                <p className="mt-1 text-sm text-[#5F4E3D]">Your board is empty. Start by adding the first task.</p>
                 <button
                   type="button"
                   onClick={() => setFormExpanded(true)}
@@ -455,44 +576,45 @@ function KanbanPageContent() {
 
         <aside className="space-y-4">
           <div className="rounded-2xl border border-[#E8E2D8] bg-white p-4 shadow-sm">
-            <h2 className="mb-2 inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">
+            <h2 className="mb-2 inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.12em] text-[#5F4E3D]">
               <Target className="h-4 w-4 text-[#C8620A]" />
               Top Focus
             </h2>
             <ul className="space-y-2">
               {focusTasks.length === 0 && (
-                <li className="rounded-lg border border-dashed border-[#E8E2D8] px-3 py-3 text-sm text-[#7A6F65]">
+                <li className="rounded-lg border border-dashed border-[#E8E2D8] px-3 py-3 text-sm text-[#5F4E3D]">
                   No focus tasks right now.
                 </li>
               )}
               {focusTasks.map((task) => (
                 <li key={task.id} className="rounded-lg bg-[#FAFAF9] px-3 py-2">
                   <p className="text-sm font-medium text-[#1C1714]">{task.title}</p>
-                  <p className="text-xs text-[#7A6F65]">
-                    {task.project_name ?? 'No project'} • {task.owner}
+                  <p className="text-xs text-[#5F4E3D]">
+                    {task.project_name ?? 'No project'} • {task.owner_type === 'human' ? 'David' : 'AI Partner'}
                   </p>
+                  <p className="text-[11px] text-[#8A7C70]">{formatDaysInStatus(task.updated_at)}</p>
                 </li>
               ))}
             </ul>
           </div>
 
           <div className="rounded-2xl border border-[#E8E2D8] bg-white p-4 shadow-sm">
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">Queue health</h2>
+            <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-[#5F4E3D]">Queue health</h2>
             <div className="space-y-2 text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-[#7A6F65]">Backlog</span>
+                <span className="text-[#5F4E3D]">Backlog</span>
                 <span className="font-semibold text-[#1C1714]">
                   {filteredTasks.filter(t => t.status === 'backlog').length}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[#7A6F65]">In progress</span>
+                <span className="text-[#5F4E3D]">In progress</span>
                 <span className="font-semibold text-[#1C1714]">
                   {filteredTasks.filter(t => t.status === 'in_progress').length}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className={filteredTasks.filter(t => t.status === 'blocked').length > 0 ? 'text-red-700' : 'text-[#7A6F65]'}>
+                <span className={filteredTasks.filter(t => t.status === 'blocked').length > 0 ? 'text-red-700' : 'text-[#5F4E3D]'}>
                   Blocked
                 </span>
                 <span className={`font-semibold ${filteredTasks.filter(t => t.status === 'blocked').length > 0 ? 'text-red-700' : 'text-[#1C1714]'}`}>
@@ -500,7 +622,7 @@ function KanbanPageContent() {
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[#7A6F65]">Done this session</span>
+                <span className="text-[#5F4E3D]">Done this session</span>
                 <span className="font-semibold text-[#1C1714]">
                   {filteredTasks.filter(t => t.status === 'done').length}
                 </span>
@@ -509,6 +631,46 @@ function KanbanPageContent() {
           </div>
         </aside>
       </section>
+
+      {closureTaskId ? (
+        <div className="fixed bottom-12 right-4 z-50 w-72 rounded-2xl border border-[#E8E2D8] bg-white p-4 shadow-lg">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">Task done</p>
+          <p className="mt-1 text-sm text-[#1C1714]">Add a quick note?</p>
+          <input
+            value={closureNote}
+            onChange={(event) => setClosureNote(event.target.value)}
+            placeholder="Lesson, next step, or leave blank..."
+            className="mt-2 w-full rounded-lg border border-[#E8E2D8] bg-[#FAFAF9] px-3 py-2 text-xs text-[#1C1714] outline-none transition focus:border-[#C8620A]"
+          />
+          <div className="mt-2 flex gap-2">
+            {closureNote.trim() ? (
+              <button
+                type="button"
+                onClick={() => {
+                  createTask({
+                    title: `Retro: ${closureNote.trim()}`,
+                    description: 'Closure note from completed task.',
+                    priority: 'low',
+                    owner_type: 'human',
+                    tags: ['retro', 'done'],
+                  })
+                  setClosureTaskId(null)
+                }}
+                className="rounded-md bg-[#C8620A] px-2.5 py-1 text-xs font-semibold text-white hover:bg-[#A04D06]"
+              >
+                Save note
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setClosureTaskId(null)}
+              className="text-xs text-[#7A6F65] hover:text-[#1C1714]"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

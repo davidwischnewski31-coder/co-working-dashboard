@@ -4,7 +4,7 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Calendar, Tag } from 'lucide-react'
 import { AttributionBadge } from './AttributionBadge'
-import { formatDate } from '@/lib/utils'
+import { formatDate, formatDaysInStatus } from '@/lib/utils'
 import type { TaskPriority, WorkspaceTask } from '@/lib/workspace'
 
 interface TaskCardProps {
@@ -15,7 +15,7 @@ interface TaskCardProps {
 }
 
 const priorityColors: Record<TaskPriority, string> = {
-  low: 'bg-[#F5F4F2] text-[#7A6F65]',
+  low: 'bg-[#F5F4F2] text-[#5F4E3D]',
   medium: 'bg-blue-100 text-blue-700',
   high: 'bg-orange-100 text-orange-700',
   urgent: 'bg-red-100 text-red-700',
@@ -52,7 +52,7 @@ export function TaskCard({ task }: TaskCardProps) {
             {task.priority}
           </span>
           {task.project_name ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-[#F5F4F2] px-2 py-0.5 text-xs text-[#7A6F65]">
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#F5F4F2] px-2 py-0.5 text-xs text-[#5F4E3D]">
               <span
                 className="h-2 w-2 rounded-full"
                 style={{ backgroundColor: task.project_color || '#64748b' }}
@@ -62,16 +62,16 @@ export function TaskCard({ task }: TaskCardProps) {
           ) : null}
         </div>
 
-        <h4 className="text-sm font-semibold leading-snug text-slate-900">{task.title}</h4>
+        <h4 className="text-sm font-semibold leading-snug text-[#1C1714]">{task.title}</h4>
 
-        {task.description ? <p className="text-xs text-[#7A6F65]">{task.description}</p> : null}
+        {task.description ? <p className="text-xs text-[#5F4E3D]">{task.description}</p> : null}
 
         {task.tags.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {task.tags.map((tag) => (
               <span
                 key={`${task.id}-${tag}`}
-                className="inline-flex items-center gap-1 rounded-md bg-[#f7f1e5] px-2 py-0.5 text-xs text-[#7A6F65]"
+                className="inline-flex items-center gap-1 rounded-md bg-[#f7f1e5] px-2 py-0.5 text-xs text-[#5F4E3D]"
               >
                 <Tag className="h-3 w-3" />
                 {tag}
@@ -80,15 +80,17 @@ export function TaskCard({ task }: TaskCardProps) {
           </div>
         ) : null}
 
+        <p className="text-[11px] text-[#8A7C70]">{formatDaysInStatus(task.updated_at)}</p>
+
         <div className="flex items-center justify-between border-t border-[#efe4d3] pt-2">
           <AttributionBadge owner={task.owner} ownerType={task.owner_type} />
           {task.due_date ? (
-            <span className={`inline-flex items-center gap-1 text-xs ${isOverdue ? 'text-red-700' : 'text-slate-500'}`}>
+            <span className={`inline-flex items-center gap-1 text-xs ${isOverdue ? 'text-red-700' : 'text-[#5F4E3D]'}`}>
               <Calendar className="h-3 w-3" />
               {formatDate(task.due_date)}
             </span>
           ) : (
-            <span className="text-xs text-slate-400">No due date</span>
+            <span className="text-xs text-[#7A6F65]">No due date</span>
           )}
         </div>
 

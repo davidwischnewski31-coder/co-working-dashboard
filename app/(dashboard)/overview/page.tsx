@@ -1,12 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowRight,
   Bot,
   CalendarDays,
-  CheckCircle2,
   CircleAlert,
   ClipboardList,
   Lightbulb,
@@ -16,8 +16,7 @@ import {
   Target,
 } from 'lucide-react'
 import { useWorkspace } from '@/components/providers/WorkspaceProvider'
-import { calculateMomentumScore } from '@/components/variants/shared/variantData'
-import { formatDate, formatDateTime } from '@/lib/utils'
+import { formatDate, formatDateTime, formatDaysInStatus } from '@/lib/utils'
 import type { OwnerType, TaskPriority, WorkspaceTask } from '@/lib/workspace'
 
 const priorityRank: Record<TaskPriority, number> = {
@@ -38,6 +37,13 @@ const AGENT_BRIEF_WINDOWS = ['07:00', '20:00']
 const AGENT_SCHEDULE = ['07:00', '12:00', '15:00', '17:00', '20:00']
 
 type ScheduleState = 'past' | 'next' | 'future'
+type RecommendationItem = {
+  id: string
+  title: string
+  detail: string
+  actionLabel: string
+  run: () => void
+}
 
 function isToday(value: string): boolean {
   const now = new Date()
@@ -103,7 +109,8 @@ function getSchedulePoints(schedule: string[]): Array<{ time: string; state: Sch
 }
 
 export default function OverviewPage() {
-  const { data, moveTask, runAgentSweep, updateTask } = useWorkspace()
+  const router = useRouter()
+  const { data, createInboxItem, moveTask, runAgentSweep, updateTask, setAgentRunning } = useWorkspace()
 
   const [editingBlockerId, setEditingBlockerId] = useState<string | null>(null)
   const [blockedBy, setBlockedBy] = useState('')
@@ -111,13 +118,19 @@ export default function OverviewPage() {
   const [nextStep, setNextStep] = useState('')
   const [checkAgainAt, setCheckAgainAt] = useState('')
   const [blockOwner, setBlockOwner] = useState<OwnerType>('human')
+  const [agentRunState, setAgentRunState] = useState<'idle' | 'running' | 'done'>('idle')
+  const [agentRunLogs, setAgentRunLogs] = useState<string[]>([])
+  const [agentRunSummary, setAgentRunSummary] = useState<string | null>(null)
+  const [pendingRecommendation, setPendingRecommendation] = useState<RecommendationItem | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const runTokenRef = useRef(0)
 
   const activeTasks = data.tasks.filter((task) => task.status !== 'done')
   const doneTasks = data.tasks.filter((task) => task.status === 'done')
   const blockedTasks = activeTasks.filter((task) => task.status === 'blocked')
   const backlogTasks = data.tasks.filter((task) => task.status === 'backlog')
   const inboxPending = data.inbox.filter((item) => item.board === 'a' && item.status === 'new')
-  const inboxDecisions = inboxPending.filter((item) => item.type === 'decision')
+  const inboxDecisions = inboxPending.filter((item) => item.type === 'decision_needed')
 
   const topPriorities = sortFocusTasks(activeTasks.filter((task) => task.status !== 'blocked')).slice(0, 3)
 
@@ -127,30 +140,70 @@ export default function OverviewPage() {
       .sort((left, right) => new Date(left.start_at).getTime() - new Date(right.start_at).getTime())
   }, [data.calendarEvents])
 
-  const todayPlanTasks = useMemo(() => {
-    return sortFocusTasks(
-      activeTasks.filter(
-        (task) =>
-          task.status !== 'done' &&
-          ((task.due_date && isToday(task.due_date)) || task.priority === 'urgent')
-      )
-    ).slice(0, 6)
-  }, [activeTasks])
+  const todayPlanTasks = sortFocusTasks(
+    activeTasks.filter(
+      (task) =>
+        task.status !== 'done' &&
+        ((task.due_date && isToday(task.due_date)) || task.priority === 'urgent')
+    )
+  ).slice(0, 6)
 
   const lastAgentRun = data.agentRuns
     .filter((run) => run.board === 'a')
     .sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime())[0]
   const schedulePoints = getSchedulePoints(AGENT_SCHEDULE)
   const hasAgentPreparedPlan = Boolean(lastAgentRun && lastAgentRun.actions.length > 0)
+  const lastRunLabel = lastAgentRun
+    ? `${new Date(lastAgentRun.timestamp).toLocaleString('en-US', {
+        weekday: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Europe/Vienna',
+      })} - ${lastAgentRun.summary}`
+    : 'Not run yet - click \"Run Agent Now\" to start.'
 
-  const recommendationItems = useMemo(() => {
-    const suggestions: Array<{
-      id: string
-      title: string
-      detail: string
-      actionLabel: string
-      run: () => void
-    }> = []
+  useEffect(() => {
+    return () => {
+      runTokenRef.current += 1
+      setAgentRunning(false)
+    }
+  }, [setAgentRunning])
+
+  useEffect(() => {
+    if (!toast) return
+    const t = window.setTimeout(() => setToast(null), 2500)
+    return () => window.clearTimeout(t)
+  }, [toast])
+
+  useEffect(() => {
+    const now = new Date()
+    for (const task of blockedTasks) {
+      if (!task.check_again_at || new Date(task.check_again_at) >= now) {
+        continue
+      }
+
+      const taskToken = `Task: ${task.id} —`
+      const alreadyFlagged = data.inbox.some(
+        (item) => item.type === 'overdue_flag' && item.status === 'new' && (item.body ?? '').includes(taskToken)
+      )
+
+      if (alreadyFlagged) {
+        continue
+      }
+
+      createInboxItem({
+        type: 'overdue_flag',
+        title: `Blocker overdue: ${task.title}`,
+        body: `Task: ${task.id} — ${task.title} overdue since ${task.check_again_at}`,
+        source: 'Agent',
+        board: 'a',
+      })
+    }
+  }, [blockedTasks, createInboxItem, data.inbox])
+
+  const recommendationItems = (() => {
+    const suggestions: RecommendationItem[] = []
 
     if (inboxDecisions.length > 0) {
       suggestions.push({
@@ -191,13 +244,13 @@ export default function OverviewPage() {
         detail: 'Use this calendar gap for a deep focus block on your top priority.',
         actionLabel: 'Open Calendar',
         run: () => {
-          window.location.href = '/shared/calendar'
+          router.push('/shared/calendar')
         },
       })
     }
 
     return suggestions.slice(0, 4)
-  }, [backlogTasks, blockedTasks, inboxDecisions.length, moveTask, runAgentSweep, todayEvents.length, topPriorities.length])
+  })()
 
   function openBlockerEditor(task: WorkspaceTask) {
     setEditingBlockerId(task.id)
@@ -229,6 +282,43 @@ export default function OverviewPage() {
     resetBlockerEditor()
   }
 
+  async function runAgentSimulation() {
+    if (agentRunState === 'running') {
+      return
+    }
+
+    const token = Date.now()
+    runTokenRef.current = token
+    setAgentRunState('running')
+    setAgentRunLogs([])
+    setAgentRunSummary(null)
+    setAgentRunning(true)
+
+    const steps = [
+      'Reviewing tasks...',
+      'Checking blocked items...',
+      'Updating priorities...',
+      'Preparing recommendations...',
+    ]
+
+    for (const step of steps) {
+      await new Promise((resolve) => window.setTimeout(resolve, 480))
+      if (runTokenRef.current !== token) {
+        return
+      }
+      setAgentRunLogs((current) => [...current, step])
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, 420))
+    if (runTokenRef.current !== token) {
+      return
+    }
+
+    setAgentRunning(false)
+    setAgentRunSummary('Done - 3 tasks reviewed, 1 flagged.')
+    setAgentRunState('done')
+  }
+
   return (
     <div className="space-y-6 variant-page">
       <section className="rounded-3xl border border-[#CBD4E1] bg-[#F8FBFF] p-6 shadow-sm sm:p-8">
@@ -249,11 +339,11 @@ export default function OverviewPage() {
                   {schedulePoints.map((point) => (
                     <li key={point.time} className="flex flex-col items-center gap-1">
                       <span
-                        className={`h-4 w-4 rounded-full border ${
+                        className={`h-4 w-4 rounded-full border-2 ${
                           point.state === 'next'
-                            ? 'border-[#C8620A] bg-[#C8620A]'
+                            ? 'border-[#C8620A] bg-[#C8620A] shadow-[0_0_0_3px_rgba(200,98,10,0.18)]'
                             : point.state === 'past'
-                              ? 'border-[#D0C8BE] bg-[#D0C8BE]'
+                              ? 'border-[#B0A898] bg-[#B0A898]'
                               : 'border-[#D0C8BE] bg-white'
                         }`}
                       />
@@ -262,6 +352,7 @@ export default function OverviewPage() {
                   ))}
                 </ol>
               </div>
+              <p className="mt-2 text-xs text-[#6A7892]">Last run: {lastRunLabel}</p>
             </div>
           </div>
           <MomentumHero doneCount={doneTasks.length} blockedCount={blockedTasks.length} />
@@ -275,12 +366,42 @@ export default function OverviewPage() {
           <Link href="/kanban" className="inline-flex items-center gap-2 rounded-xl border border-[#CBD4E1] bg-white px-4 py-2.5 text-sm font-semibold text-[#415069] transition-colors hover:bg-[#EEF3FA]">
             Open Kanban
           </Link>
-          <button
-            onClick={() => runAgentSweep({ board: 'a', run_type: 'manual' })}
-            className="inline-flex items-center gap-2 rounded-xl border border-[#CBD4E1] bg-white px-4 py-2.5 text-sm font-semibold text-[#415069] transition-colors hover:bg-[#EEF3FA]"
-          >
-            Run Agent Now
-          </button>
+          <Link href="/capture" className="inline-flex items-center gap-2 rounded-xl border border-[#CBD4E1] bg-white px-4 py-2.5 text-sm font-semibold text-[#415069] transition-colors hover:bg-[#EEF3FA]">
+            Open Capture
+          </Link>
+          {agentRunState === 'idle' ? (
+            <button
+              onClick={runAgentSimulation}
+              className="inline-flex items-center gap-2 rounded-xl border border-[#CBD4E1] bg-white px-4 py-2.5 text-sm font-semibold text-[#415069] transition-colors hover:bg-[#EEF3FA]"
+            >
+              Run Agent Now
+            </button>
+          ) : (
+            <div className="min-w-[260px] rounded-xl border border-[#CBD4E1] bg-white px-3 py-2.5">
+              <p className="text-sm font-semibold text-[#415069]">
+                {agentRunState === 'running' ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-[#CBD4E1] border-t-[#C8620A] animate-spin" />
+                    ◉ Running...
+                  </span>
+                ) : (
+                  'Done'
+                )}
+              </p>
+              {agentRunLogs.length > 0 ? (
+                <ul className="mt-1 space-y-0.5">
+                  {agentRunLogs.map((line) => (
+                    <li key={line} className="text-xs text-[#6A7892]">
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {agentRunSummary ? (
+                <p className="mt-1 text-xs font-medium text-[#3D2A18]">{agentRunSummary}</p>
+              ) : null}
+            </div>
+          )}
         </div>
       </section>
 
@@ -321,6 +442,8 @@ export default function OverviewPage() {
                   <p className="mt-1 text-xs text-[#5E6B82]">
                     {task.due_date && isToday(task.due_date) ? 'Due today' : 'No due date'} · {task.priority}
                     {task.priority === 'urgent' ? ' urgent' : ' priority'}
+                    {' · '}
+                    {formatDaysInStatus(task.updated_at)}
                   </p>
                 </li>
               ))}
@@ -370,6 +493,7 @@ export default function OverviewPage() {
                     {task.due_date ? <span className="text-[11px] text-[#6A7892]">Due {formatDate(task.due_date)}</span> : null}
                   </div>
                   <p className="mt-1 text-sm font-semibold text-[#1A2433]">{task.title}</p>
+                  <p className="mt-1 text-[11px] text-[#6A7892]">{formatDaysInStatus(task.updated_at)}</p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <button onClick={() => moveTask(task.id, 'in_progress')} className="rounded-md border border-[#CBD4E1] bg-white px-2 py-1 text-[11px] font-semibold text-[#415069] hover:border-[#2453A6] hover:text-[#2453A6]">Start</button>
                     <button onClick={() => moveTask(task.id, 'done')} className="rounded-md border border-[#CBD4E1] bg-white px-2 py-1 text-[11px] font-semibold text-[#415069] hover:border-[#2453A6] hover:text-[#2453A6]">Done</button>
@@ -410,6 +534,7 @@ export default function OverviewPage() {
                       <p>Dependency: {task.dependency ?? 'Not set'}</p>
                       <p>Next step: {task.next_unblock_step ?? 'Not set'}</p>
                       <p>Check again: {task.check_again_at ? formatDateTime(task.check_again_at) : 'Not set'}</p>
+                      <p>Aging: {formatDaysInStatus(task.updated_at)}</p>
                     </div>
 
                     {!isEditing ? (
@@ -478,7 +603,7 @@ export default function OverviewPage() {
                     <p className="text-sm font-semibold text-[#1A2433]">{item.title}</p>
                     <p className="mt-1 text-xs text-[#5E6B82]">{item.detail}</p>
                     <button
-                      onClick={item.run}
+                      onClick={() => setPendingRecommendation(item)}
                       className="mt-2 rounded-md border border-[#CBD4E1] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#415069] transition-colors hover:border-[#2453A6] hover:text-[#2453A6]"
                     >
                       {item.actionLabel}
@@ -487,13 +612,43 @@ export default function OverviewPage() {
                 ))}
               </ul>
             )}
+
+            {pendingRecommendation ? (
+              <div className="mt-3 rounded-lg border border-[#CBD4E1] bg-[#EEF3FA] p-3">
+                <p className="text-sm font-semibold text-[#1A2433]">Confirm: {pendingRecommendation.title}</p>
+                <p className="mt-1 text-xs text-[#5E6B82]">{pendingRecommendation.detail}</p>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={() => {
+                      pendingRecommendation.run()
+                      setToast(pendingRecommendation.actionLabel)
+                      setPendingRecommendation(null)
+                    }}
+                    className="rounded-md bg-[#2453A6] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#1A4286]"
+                  >
+                    {pendingRecommendation.actionLabel}
+                  </button>
+                  <button
+                    onClick={() => setPendingRecommendation(null)}
+                    className="text-xs text-[#5E6B82] hover:text-[#1A2433]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </article>
 
           <article className="rounded-2xl border border-[#CAD5E4] bg-white p-5 shadow-sm sm:p-6">
-            <h2 className="inline-flex items-center gap-2 text-lg font-semibold text-[#1A2433]">
-              <Lightbulb className="h-5 w-5 text-[#2453A6]" />
-              Morning / Evening Brief
-            </h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="inline-flex items-center gap-2 text-lg font-semibold text-[#1A2433]">
+                <Lightbulb className="h-5 w-5 text-[#2453A6]" />
+                Morning / Evening Brief
+              </h2>
+              <Link href="/daily" className="text-xs font-semibold text-[#2453A6] hover:underline">
+                Open shell
+              </Link>
+            </div>
             <p className="mt-1 text-sm text-[#5E6B82]">
               Brief windows (CET): {AGENT_BRIEF_WINDOWS.join(' · ')}
             </p>
@@ -519,6 +674,12 @@ export default function OverviewPage() {
           </article>
         </div>
       </section>
+
+      {toast ? (
+        <div className="fixed bottom-12 right-4 z-50 rounded-xl border border-[#CBD4E1] bg-white px-4 py-2.5 shadow-lg">
+          <p className="text-sm font-medium text-[#1A2433]">Done: {toast}</p>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -548,10 +709,8 @@ function MomentumHero({ doneCount, blockedCount }: { doneCount: number; blockedC
     <div className="rounded-2xl border border-[#CBD4E1] bg-white px-4 py-3 text-right">
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#5E6B82]">Momentum</p>
       <p className="mt-1 font-[family-name:var(--font-dashboard-mono)] text-4xl font-semibold tabular-nums text-[#1A2433]">{score}</p>
-      <p className="text-xs text-[#5E6B82]">
-        <CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />
-        {doneCount} done · <CircleAlert className="mx-1 inline h-3.5 w-3.5" />
-        {blockedCount} blocked
+      <p className="mt-1 text-xs text-[#5E6B82]">
+        {doneCount} done · {blockedCount} blocked
       </p>
     </div>
   )

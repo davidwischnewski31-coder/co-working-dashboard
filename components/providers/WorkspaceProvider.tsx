@@ -22,7 +22,6 @@ import {
   type IdeaCategory,
   type IdeaStatus,
   type InboxItemType,
-  type InboxUrgency,
   type OwnerType,
   type ProjectStatus,
   type SharedTodoAssignee,
@@ -95,10 +94,9 @@ interface AddArticleInput {
 
 interface CreateInboxItemInput {
   title: string
-  type?: InboxItemType
-  urgency?: InboxUrgency
-  source_url?: string | null
-  notes?: string | null
+  type: InboxItemType
+  body?: string | null
+  source?: string
   board?: WorkspaceBoard
 }
 
@@ -163,6 +161,8 @@ interface UpdateCalendarEventInput {
 interface WorkspaceContextValue {
   data: WorkspaceData
   isReady: boolean
+  isAgentRunning: boolean
+  setAgentRunning: (running: boolean) => void
   resetToDemoData: () => void
   logNavigation: (path: string) => void
   createTask: (input: CreateTaskInput) => void
@@ -261,12 +261,11 @@ function getScheduleSlotKey(date: Date): string | null {
   return `${year}-${month}-${day}T${hour}:00@${AGENT_TIMEZONE}`
 }
 
-function normalizeUrgencyToPriority(urgency: InboxUrgency, type: InboxItemType): TaskPriority {
-  if (urgency === 'now') return 'urgent'
-  if (urgency === 'today') return 'high'
-  if (urgency === 'week') return type === 'decision' ? 'high' : 'medium'
-  if (urgency === 'later') return 'low'
-  return type === 'decision' ? 'high' : 'medium'
+function inboxTypeToPriority(type: InboxItemType): TaskPriority {
+  if (type === 'overdue_flag') return 'urgent'
+  if (type === 'decision_needed') return 'high'
+  if (type === 'shared_update') return 'medium'
+  return 'medium'
 }
 
 function addRecurrence(dateIso: string, recurrence: SharedTodoRecurrence): string {
@@ -307,6 +306,10 @@ const colorPalette = ['#EF6C00', '#00796B', '#546E7A', '#8E24AA', '#2E7D32', '#1
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<WorkspaceData>(() => getSeedWorkspaceData())
   const [isReady, setIsReady] = useState(false)
+  const [isAgentRunning, setIsAgentRunning] = useState(false)
+  const setAgentRunning = useCallback((running: boolean) => {
+    setIsAgentRunning(running)
+  }, [])
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
@@ -776,12 +779,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               id: inboxId,
               board: input.board ?? 'a',
               title: normalizedTitle,
-              type: input.type ?? 'task',
-              urgency: input.urgency ?? 'auto',
-              source_url: input.source_url?.trim() || null,
-              notes: input.notes?.trim() || null,
+              type: input.type,
+              body: input.body?.trim() || null,
+              source: input.source?.trim() || 'David',
               status: 'new' as const,
-              created_by: 'David',
               created_at: now,
               processed_at: null,
             },
@@ -848,13 +849,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
         if (pendingInbox.length > 0) {
           const createdTasks = pendingInbox.map((item) => {
-            const taskPriority = normalizeUrgencyToPriority(item.urgency, item.type)
-            const title = item.type === 'decision' ? `Decision: ${item.title}` : item.type === 'link' ? `Review: ${item.title}` : item.title
+            const taskPriority = inboxTypeToPriority(item.type)
+            const title = item.type === 'decision_needed' ? `Decision: ${item.title}` : item.title
 
             const descriptionParts = [
-              item.notes,
-              item.source_url ? `Source: ${item.source_url}` : null,
-              item.type === 'decision'
+              item.body,
+              item.source ? `Source: ${item.source}` : null,
+              item.type === 'decision_needed'
                 ? 'Agent output required: provide 3 options and one clear recommendation.'
                 : `Captured from inbox (${item.type}).`,
             ].filter(Boolean)
@@ -871,7 +872,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               owner: 'AI Partner',
               owner_type: 'agent' as OwnerType,
               due_date: null,
-              tags: ['inbox', item.type, item.urgency],
+              tags: ['inbox', item.type],
               blocked_by: null,
               dependency: null,
               next_unblock_step: null,
@@ -1322,6 +1323,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     () => ({
       data,
       isReady,
+      isAgentRunning,
+      setAgentRunning,
       resetToDemoData,
       logNavigation,
       createTask,
@@ -1361,11 +1364,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       deleteSharedTodo,
       deleteShoppingItem,
       isReady,
+      isAgentRunning,
       logNavigation,
       markInboxItemProcessed,
       moveTask,
       resetToDemoData,
       runAgentSweep,
+      setAgentRunning,
       updateArticleStatus,
       updateCalendarEvent,
       updateIdeaStatus,

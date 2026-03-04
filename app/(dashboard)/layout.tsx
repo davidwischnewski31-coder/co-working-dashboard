@@ -54,12 +54,16 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   const commandActions: CommandAction[] = useMemo(() => {
     const boardAActions: CommandAction[] = [
       { id: 'nav-overview', label: 'Go to Overview', keywords: ['home', 'summary'], run: () => router.push('/overview') },
+      { id: 'nav-capture', label: 'Go to Capture', keywords: ['intake', 'quick add', 'capture'], run: () => router.push('/capture') },
       { id: 'nav-inbox', label: 'Go to Inbox', keywords: ['capture', 'intake'], run: () => router.push('/inbox') },
       { id: 'nav-kanban', label: 'Go to Kanban', keywords: ['tasks', 'board', 'work'], run: () => router.push('/kanban') },
       { id: 'nav-projects', label: 'Go to Projects', keywords: ['initiatives'], run: () => router.push('/projects') },
       { id: 'nav-ideas', label: 'Go to Ideas', keywords: ['pipeline', 'brainstorm'], run: () => router.push('/ideas') },
       { id: 'nav-reading', label: 'Go to Reading', keywords: ['articles', 'queue'], run: () => router.push('/reading') },
       { id: 'nav-activity', label: 'Go to Activity', keywords: ['log', 'timeline'], run: () => router.push('/activity') },
+      { id: 'nav-decisions', label: 'Go to Decisions', keywords: ['journal', 'calls', 'processed'], run: () => router.push('/decisions') },
+      { id: 'nav-daily', label: 'Go to Daily Workflow', keywords: ['morning', 'evening', 'ritual'], run: () => router.push('/daily') },
+      { id: 'nav-weekly-review', label: 'Go to Weekly Review', keywords: ['ritual', 'review', 'weekly'], run: () => router.push('/weekly-review') },
       { id: 'nav-agent-log', label: 'Go to Agent Log', keywords: ['automation', 'runs'], run: () => router.push('/agent-log') },
     ]
 

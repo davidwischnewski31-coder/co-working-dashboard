@@ -1,7 +1,11 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next'
+
+const rawVariant = process.env.NEXT_PUBLIC_DASHBOARD_VARIANT ?? 'v1'
+const safeVariant = rawVariant.replace(/[^a-z0-9_-]/gi, '').toLowerCase() || 'v1'
 
 const nextConfig: NextConfig = {
-  /* config options here */
-};
+  // Keep variant artifacts under .next/* so Tailwind's scanner ignores cache binaries.
+  distDir: `.next/${safeVariant}`,
+}
 
-export default nextConfig;
+export default nextConfig

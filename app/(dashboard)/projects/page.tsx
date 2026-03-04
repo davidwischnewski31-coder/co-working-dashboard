@@ -19,6 +19,7 @@ const projectStatusClasses: Record<ProjectStatus, string> = {
 export default function ProjectsPage() {
   const { data, createProject } = useWorkspace()
 
+  const [formExpanded, setFormExpanded] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState<ProjectStatus>('active')
@@ -81,6 +82,7 @@ export default function ProjectsPage() {
     setName('')
     setDescription('')
     setStatus('active')
+    setFormExpanded(false)
   }
 
   return (
@@ -100,57 +102,76 @@ export default function ProjectsPage() {
           </span>
         </div>
 
-        <form onSubmit={handleCreateProject} className="grid gap-3 lg:grid-cols-12">
-          <div className="lg:col-span-4">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">
-              Project Name
-            </label>
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Name your next initiative"
-              className="w-full rounded-xl border border-[#E8E2D8] bg-[#FAFAF9] px-3 py-2.5 text-sm text-[#1C1714] outline-none transition focus:border-[#C8620A] focus:ring-2 focus:ring-[#FEF3E2]"
-            />
-          </div>
+        {!formExpanded ? (
+          <button
+            type="button"
+            onClick={() => setFormExpanded(true)}
+            className="flex w-full items-center gap-2 rounded-xl border border-dashed border-[#E8E2D8] px-4 py-3 text-sm text-[#7A6F65] transition-colors hover:border-[#C8620A] hover:text-[#C8620A]"
+          >
+            <Plus className="h-4 w-4" />
+            Start a new project...
+          </button>
+        ) : (
+          <form onSubmit={handleCreateProject} className="grid gap-3 lg:grid-cols-12">
+            <div className="lg:col-span-4">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">
+                Project Name
+              </label>
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Name your next initiative"
+                className="w-full rounded-xl border border-[#E8E2D8] bg-[#FAFAF9] px-3 py-2.5 text-sm text-[#1C1714] outline-none transition focus:border-[#C8620A] focus:ring-2 focus:ring-[#FEF3E2]"
+              />
+            </div>
 
-          <div className="lg:col-span-5">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">
-              Description
-            </label>
-            <input
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="What outcome are you trying to produce?"
-              className="w-full rounded-xl border border-[#E8E2D8] bg-[#FAFAF9] px-3 py-2.5 text-sm text-[#1C1714] outline-none transition focus:border-[#C8620A] focus:ring-2 focus:ring-[#FEF3E2]"
-            />
-          </div>
+            <div className="lg:col-span-5">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">
+                Description
+              </label>
+              <input
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="What outcome are you trying to produce?"
+                className="w-full rounded-xl border border-[#E8E2D8] bg-[#FAFAF9] px-3 py-2.5 text-sm text-[#1C1714] outline-none transition focus:border-[#C8620A] focus:ring-2 focus:ring-[#FEF3E2]"
+              />
+            </div>
 
-          <div className="lg:col-span-2">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">
-              Status
-            </label>
-            <select
-              value={status}
-              onChange={(event) => setStatus(event.target.value as ProjectStatus)}
-              className="w-full rounded-xl border border-[#E8E2D8] bg-[#FAFAF9] px-3 py-2.5 text-sm text-[#1C1714]"
-            >
-              <option value="idea">Idea</option>
-              <option value="active">Active</option>
-              <option value="paused">Paused</option>
-              <option value="shipped">Shipped</option>
-            </select>
-          </div>
+            <div className="lg:col-span-2">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">
+                Status
+              </label>
+              <select
+                value={status}
+                onChange={(event) => setStatus(event.target.value as ProjectStatus)}
+                className="w-full rounded-xl border border-[#E8E2D8] bg-[#FAFAF9] px-3 py-2.5 text-sm text-[#1C1714]"
+              >
+                <option value="idea">Idea</option>
+                <option value="active">Active</option>
+                <option value="paused">Paused</option>
+                <option value="shipped">Shipped</option>
+              </select>
+            </div>
 
-          <div className="lg:col-span-1 lg:self-end">
+            <div className="lg:col-span-1 lg:self-end">
+              <button
+                type="submit"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#C8620A] px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#A04D06]"
+              >
+                <Plus className="h-4 w-4" />
+                Add
+              </button>
+            </div>
+
             <button
-              type="submit"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#C8620A] px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#A04D06]"
+              type="button"
+              onClick={() => setFormExpanded(false)}
+              className="lg:col-span-12 w-fit text-sm text-[#7A6F65] transition-colors hover:text-[#1C1714]"
             >
-              <Plus className="h-4 w-4" />
-              Add
+              Cancel
             </button>
-          </div>
-        </form>
+          </form>
+        )}
       </section>
 
       {unassignedTasks > 0 ? (
@@ -169,9 +190,10 @@ export default function ProjectsPage() {
             projectStats.total === 0 ? 0 : Math.round((projectStats.done / projectStats.total) * 100)
 
           return (
-            <article
+            <Link
               key={project.id}
-              className="rounded-2xl border border-[#E8E2D8] bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+              href={`/projects/${project.id}`}
+              className="block rounded-2xl border border-[#E8E2D8] bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
             >
               <header className="mb-4 flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
@@ -237,15 +259,10 @@ export default function ProjectsPage() {
 
                 <div className="mt-4 flex items-center justify-between border-t border-[#E8E2D8] pt-3">
                   <p className="text-xs text-[#7A6F65]">Updated {formatDate(project.updated_at)}</p>
-                  <Link
-                    href={`/kanban?project=${project.id}`}
-                    className="text-xs font-medium text-[#C8620A] hover:underline"
-                  >
-                    View tasks →
-                  </Link>
+                  <span className="text-xs font-medium text-[#C8620A]">Open project →</span>
                 </div>
               </div>
-            </article>
+            </Link>
           )
         })}
       </section>

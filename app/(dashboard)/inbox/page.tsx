@@ -1,28 +1,60 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { Inbox, Link2, ListTodo, Mail, NotebookPen, Play, Plus, Scale } from 'lucide-react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
+import { Inbox, Plus } from 'lucide-react'
 import { useWorkspace } from '@/components/providers/WorkspaceProvider'
-import type { InboxItemType, InboxUrgency } from '@/lib/workspace'
+import type { InboxItemType, WorkspaceInboxItem } from '@/lib/workspace'
 import { formatDateTime } from '@/lib/utils'
 
-const TYPE_META: Record<InboxItemType, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
-  task: { label: 'Task', icon: ListTodo },
-  link: { label: 'Link', icon: Link2 },
-  note: { label: 'Note', icon: NotebookPen },
-  email: { label: 'Email', icon: Mail },
-  decision: { label: 'Decision', icon: Scale },
+const LAST_CHECK_KEY = 'co_working_dashboard.inbox_last_checked'
+
+const TYPE_META: Record<
+  InboxItemType,
+  {
+    label: string
+    primaryAction: string
+    secondaryAction: string
+  }
+> = {
+  agent_suggestion: {
+    label: 'Agent Suggestion',
+    primaryAction: 'Accept',
+    secondaryAction: 'Dismiss',
+  },
+  decision_needed: {
+    label: 'Decision Needed',
+    primaryAction: 'Act',
+    secondaryAction: 'Snooze',
+  },
+  shared_update: {
+    label: 'Shared Update',
+    primaryAction: 'Accept',
+    secondaryAction: 'Dismiss',
+  },
+  overdue_flag: {
+    label: 'Overdue Flag',
+    primaryAction: 'Act',
+    secondaryAction: 'Dismiss',
+  },
 }
 
-const URGENCY_META: Record<InboxUrgency, string> = {
-  auto: 'Auto',
-  now: 'Now',
-  today: 'Today',
-  week: 'This Week',
-  later: 'Later',
-}
+function relatedRouteForItem(item: WorkspaceInboxItem): { href: string; label: string } {
+  if (item.type === 'decision_needed') {
+    return { href: '/decisions', label: 'Open Decisions' }
+  }
 
-const SCHEDULE = ['07:00', '12:00', '15:00', '17:00', '20:00']
+  if (item.type === 'shared_update') {
+    return { href: '/shared/log', label: 'Open Shared Log' }
+  }
+
+  if (item.type === 'overdue_flag') {
+    return { href: '/kanban', label: 'Open Kanban' }
+  }
+
+  return { href: '/overview', label: 'Open Overview' }
+}
 
 function isTypingElement(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
@@ -34,26 +66,40 @@ function isTypingElement(target: EventTarget | null): boolean {
     tag === 'INPUT' ||
     tag === 'TEXTAREA' ||
     tag === 'SELECT' ||
-    Boolean(target.closest('[contenteditable="true"]'))
+    Boolean(target.closest('[contenteditable=\"true\"]'))
   )
 }
 
-export default function InboxPage() {
-  const { data, createInboxItem, markInboxItemProcessed, runAgentSweep } = useWorkspace()
+function InboxPageContent() {
+  const { data, createInboxItem, markInboxItemProcessed, createTask } = useWorkspace()
+  const searchParams = useSearchParams()
 
   const [title, setTitle] = useState('')
-  const [type, setType] = useState<InboxItemType>('task')
-  const [urgency, setUrgency] = useState<InboxUrgency>('auto')
-  const [sourceUrl, setSourceUrl] = useState('')
-  const [notes, setNotes] = useState('')
+  const [type, setType] = useState<InboxItemType>('agent_suggestion')
+  const [body, setBody] = useState('')
+  const [source, setSource] = useState('David')
   const [focusedPendingIndex, setFocusedPendingIndex] = useState<number | null>(null)
+  const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null)
+  const [decisionDraft, setDecisionDraft] = useState<{ item: WorkspaceInboxItem; call: string } | null>(null)
 
-  const inboxItems = useMemo(() => data.inbox.filter((item) => item.board === 'a'), [data.inbox])
+  const inboxItems = useMemo(
+    () => (Array.isArray(data.inbox) ? data.inbox.filter((item) => item.board === 'a') : []),
+    [data.inbox]
+  )
   const pending = inboxItems.filter((item) => item.status === 'new')
   const processed = inboxItems.filter((item) => item.status === 'processed')
 
-  const decisionPending = pending.filter((item) => item.type === 'decision').length
-  const backlogCount = data.tasks.filter((task) => task.status === 'backlog').length
+  useEffect(() => {
+    const stored = window.localStorage.getItem(LAST_CHECK_KEY)
+    if (stored) {
+      setLastCheckedAt(stored)
+      return
+    }
+
+    const now = new Date().toISOString()
+    window.localStorage.setItem(LAST_CHECK_KEY, now)
+    setLastCheckedAt(now)
+  }, [])
 
   useEffect(() => {
     if (pending.length === 0) {
@@ -61,10 +107,58 @@ export default function InboxPage() {
       return
     }
 
+    const focusId = searchParams.get('focus')
+    if (focusId) {
+      const index = pending.findIndex((item) => item.id === focusId)
+      if (index >= 0) {
+        setFocusedPendingIndex(index)
+        return
+      }
+    }
+
     if (focusedPendingIndex === null || focusedPendingIndex >= pending.length) {
       setFocusedPendingIndex(0)
     }
-  }, [focusedPendingIndex, pending.length])
+  }, [focusedPendingIndex, pending, searchParams])
+
+  function touchLastChecked() {
+    const now = new Date().toISOString()
+    window.localStorage.setItem(LAST_CHECK_KEY, now)
+    setLastCheckedAt(now)
+  }
+
+  function handlePrimaryAction(item: WorkspaceInboxItem) {
+    if (item.type === 'decision_needed') {
+      setDecisionDraft({ item, call: '' })
+      return
+    }
+
+    if (item.type === 'overdue_flag') {
+      createTask({
+        title: `Resolve overdue: ${item.title}`,
+        description: item.body ?? undefined,
+        priority: 'urgent',
+        owner_type: 'human',
+        tags: ['inbox', 'overdue'],
+      })
+    } else {
+      createTask({
+        title: item.title,
+        description: item.body ?? undefined,
+        priority: 'medium',
+        owner_type: 'human',
+        tags: ['inbox', item.type],
+      })
+    }
+
+    markInboxItemProcessed(item.id)
+    touchLastChecked()
+  }
+
+  function handleSecondaryAction(itemId: string) {
+    markInboxItemProcessed(itemId)
+    touchLastChecked()
+  }
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -104,7 +198,7 @@ export default function InboxPage() {
           return
         }
         event.preventDefault()
-        markInboxItemProcessed(current.id)
+        handlePrimaryAction(current)
       }
 
       if (event.key === 'Escape') {
@@ -114,238 +208,279 @@ export default function InboxPage() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [focusedPendingIndex, markInboxItemProcessed, pending])
+  }, [focusedPendingIndex, pending])
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!title.trim()) {
+    const normalizedTitle = title.trim()
+    if (!normalizedTitle) {
       return
     }
 
     createInboxItem({
       board: 'a',
-      title,
+      title: normalizedTitle,
       type,
-      urgency,
-      source_url: sourceUrl,
-      notes,
+      body: body.trim() || null,
+      source: source.trim() || 'David',
     })
 
     setTitle('')
-    setType('task')
-    setUrgency('auto')
-    setSourceUrl('')
-    setNotes('')
+    setType('agent_suggestion')
+    setBody('')
+    setSource('David')
   }
 
   return (
     <div className="space-y-6 variant-page">
-      <section className="rounded-2xl border border-[#CBD4E1] bg-[#F8FBFF] p-5 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-[#1A2433] sm:text-2xl">Inbox Hub</h1>
-            <p className="mt-1 text-sm text-[#5E6B82]">
-              Capture links, tasks, notes, emails, and decisions. Agent sweeps convert pending items to actionable backlog.
-            </p>
-          </div>
-          <button
-            onClick={() => runAgentSweep({ board: 'a', run_type: 'manual' })}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#2453A6] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1A4286]"
-          >
-            <Play className="h-4 w-4" />
-            Run Agent Now
-          </button>
-        </div>
+      <section className="rounded-2xl border border-[#E8E2D8] bg-white p-5 shadow-sm sm:p-6">
+        <h1 className="text-xl font-semibold text-[#1C1714] sm:text-2xl">Inbox Hub</h1>
+        <p className="mt-1 text-sm text-[#7A6F65]">
+          One queue for agent suggestions, decisions, shared updates, and overdue flags.
+        </p>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-4">
-          <Metric label="Pending Inbox" value={pending.length} />
-          <Metric label="Decisions Pending" value={decisionPending} />
-          <Metric label="Backlog Tasks" value={backlogCount} />
-          <Metric label="Processed" value={processed.length} />
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-[#CBD4E1] bg-white p-5 shadow-sm sm:p-6">
-        <h2 className="text-base font-semibold text-[#1A2433]">Capture Item</h2>
-        <form onSubmit={handleSubmit} className="mt-3 grid gap-3 lg:grid-cols-12">
+        <form onSubmit={handleSubmit} className="mt-4 grid gap-3 lg:grid-cols-12">
           <div className="lg:col-span-4">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#6A7892]">Title</label>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">Title</label>
             <input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="What should the agent process?"
-              className="w-full rounded-lg border border-[#CBD4E1] bg-white px-3 py-2 text-sm text-[#1A2433] outline-none transition focus:border-[#2453A6]"
+              placeholder="Capture a new inbox item"
+              className="w-full rounded-lg border border-[#E8E2D8] bg-white px-3 py-2 text-sm text-[#1C1714] outline-none transition focus:border-[#C8620A]"
               required
             />
           </div>
-
-          <div className="lg:col-span-2">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#6A7892]">Type</label>
+          <div className="lg:col-span-3">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">Type</label>
             <select
               value={type}
               onChange={(event) => setType(event.target.value as InboxItemType)}
-              className="w-full rounded-lg border border-[#CBD4E1] bg-white px-3 py-2 text-sm text-[#1A2433] outline-none transition focus:border-[#2453A6]"
+              className="w-full rounded-lg border border-[#E8E2D8] bg-white px-3 py-2 text-sm text-[#1C1714] outline-none transition focus:border-[#C8620A]"
             >
-              <option value="task">Task</option>
-              <option value="decision">Decision</option>
-              <option value="link">Link</option>
-              <option value="note">Note</option>
-              <option value="email">Email</option>
+              <option value="agent_suggestion">Agent suggestion</option>
+              <option value="decision_needed">Decision needed</option>
+              <option value="shared_update">Shared update</option>
+              <option value="overdue_flag">Overdue flag</option>
             </select>
           </div>
-
-          <div className="lg:col-span-2">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#6A7892]">Urgency</label>
-            <select
-              value={urgency}
-              onChange={(event) => setUrgency(event.target.value as InboxUrgency)}
-              className="w-full rounded-lg border border-[#CBD4E1] bg-white px-3 py-2 text-sm text-[#1A2433] outline-none transition focus:border-[#2453A6]"
-            >
-              <option value="auto">Auto</option>
-              <option value="now">Now</option>
-              <option value="today">Today</option>
-              <option value="week">This Week</option>
-              <option value="later">Later</option>
-            </select>
-          </div>
-
-          <div className="lg:col-span-4">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#6A7892]">Source URL (optional)</label>
+          <div className="lg:col-span-3">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">Source</label>
             <input
-              value={sourceUrl}
-              onChange={(event) => setSourceUrl(event.target.value)}
-              placeholder="https://..."
-              className="w-full rounded-lg border border-[#CBD4E1] bg-white px-3 py-2 text-sm text-[#1A2433] outline-none transition focus:border-[#2453A6]"
+              value={source}
+              onChange={(event) => setSource(event.target.value)}
+              placeholder="Agent or person"
+              className="w-full rounded-lg border border-[#E8E2D8] bg-white px-3 py-2 text-sm text-[#1C1714] outline-none transition focus:border-[#C8620A]"
             />
           </div>
-
-          <div className="lg:col-span-12">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#6A7892]">Notes (optional)</label>
-            <textarea
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              rows={3}
-              placeholder="Decision context, constraints, or what outcome you want"
-              className="w-full rounded-lg border border-[#CBD4E1] bg-white px-3 py-2 text-sm text-[#1A2433] outline-none transition focus:border-[#2453A6]"
-            />
-          </div>
-
-          <div className="lg:col-span-12 flex items-center gap-2">
+          <div className="lg:col-span-2 lg:self-end">
             <button
               type="submit"
-              className="inline-flex items-center gap-2 rounded-lg bg-[#2453A6] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white transition-colors hover:bg-[#1A4286]"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#C8620A] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white transition-colors hover:bg-[#A04D06]"
             >
               <Plus className="h-3.5 w-3.5" />
-              Add to Inbox
+              Add
             </button>
-            <p className="text-xs text-[#6A7892]">Agent schedule (CET): {SCHEDULE.join(' · ')}</p>
+          </div>
+          <div className="lg:col-span-12">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">Body</label>
+            <textarea
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
+              rows={2}
+              placeholder="1-2 sentence context"
+              className="w-full rounded-lg border border-[#E8E2D8] bg-white px-3 py-2 text-sm text-[#1C1714] outline-none transition focus:border-[#C8620A]"
+            />
           </div>
         </form>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-2">
-        <article className="rounded-2xl border border-[#CBD4E1] bg-white p-5 shadow-sm sm:p-6">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-[#1A2433]">Pending</h2>
-            <span className="rounded-full bg-[#EEF3FA] px-2.5 py-1 text-xs font-semibold text-[#415069]">{pending.length}</span>
+      <section className="rounded-2xl border border-[#E8E2D8] bg-white p-5 shadow-sm sm:p-6">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-[#1C1714]">Pending</h2>
+          <span className="rounded-full bg-[#F5F4F2] px-2.5 py-1 text-xs font-semibold text-[#7A6F65]">
+            {pending.length}
+          </span>
+        </div>
+        <p className="mb-3 text-[11px] text-[#7A6F65]">
+          Keyboard: `j` / `k` to move, `Enter` to run primary action, `Esc` to clear focus.
+        </p>
+
+        {pending.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-[#E8E2D8] bg-[#FAFAF9] px-3 py-8 text-center text-sm text-[#7A6F65]">
+            <div className="mx-auto mb-2 inline-flex rounded-lg bg-white p-2 text-[#7A6F65]">
+              <Inbox className="h-4 w-4" />
+            </div>
+            <p className="font-medium text-[#1C1714]">You&apos;re all caught up</p>
+            <p className="mt-1 text-xs text-[#7A6F65]">
+              Last checked {lastCheckedAt ? formatDateTime(lastCheckedAt) : 'just now'}
+            </p>
           </div>
-          <p className="mb-3 text-[11px] text-[#6A7892]">Keyboard: `j` / `k` to move, `Enter` to process, `Esc` to clear focus.</p>
+        ) : (
+          <ul className="space-y-2">
+            {pending.map((item, index) => {
+              const meta = TYPE_META[item.type] ?? TYPE_META.agent_suggestion
+              const related = relatedRouteForItem(item)
 
-          {pending.length === 0 ? (
-            <Empty text="No pending inbox items." />
-          ) : (
-            <ul className="space-y-2">
-              {pending.map((item, index) => {
-                const Icon = TYPE_META[item.type].icon
-                return (
-                  <li
-                    key={item.id}
-                    className={`rounded-lg border p-3 ${
-                      focusedPendingIndex === index
-                        ? 'ring-1 ring-[#E8E2D8] bg-[#FAFAF9]'
-                        : item.type === 'decision'
-                          ? 'border-[#E7D6AA] bg-[#FFF9E8]'
-                          : 'border-[#D7E0EB] bg-[#F8FBFF]'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <p className="inline-flex items-center gap-1.5 rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-[#5E6B82]">
-                            <Icon className="h-3 w-3" />
-                            {TYPE_META[item.type].label}
-                          </p>
-                          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-[#5E6B82]">
-                            {URGENCY_META[item.urgency]}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-sm font-medium text-[#1A2433]">{item.title}</p>
-                        {item.source_url ? (
-                          <a href={item.source_url} target="_blank" rel="noreferrer" className="mt-1 block text-xs text-[#2453A6] hover:underline">
-                            {item.source_url}
-                          </a>
-                        ) : null}
-                        {item.notes ? <p className="mt-1 text-xs text-[#5E6B82]">{item.notes}</p> : null}
-                        <p className="mt-1 text-[11px] text-[#7B89A1]">{formatDateTime(item.created_at)}</p>
-                      </div>
-                      <button
-                        onClick={() => markInboxItemProcessed(item.id)}
-                        className="shrink-0 rounded-lg border border-[#CBD4E1] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#415069] transition-colors hover:border-[#2453A6] hover:text-[#2453A6]"
-                      >
-                        Mark done
-                      </button>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </article>
-
-        <article className="rounded-2xl border border-[#CBD4E1] bg-white p-5 shadow-sm sm:p-6">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-[#1A2433]">Processed</h2>
-            <span className="rounded-full bg-[#EEF3FA] px-2.5 py-1 text-xs font-semibold text-[#415069]">{processed.length}</span>
-          </div>
-
-          {processed.length === 0 ? (
-            <Empty text="No processed items yet." />
-          ) : (
-            <ul className="space-y-2">
-              {processed.slice(0, 12).map((item) => (
-                <li key={item.id} className="rounded-lg border border-[#D7E0EB] bg-[#F8FBFF] p-3">
-                  <p className="text-sm font-medium text-[#1A2433]">{item.title}</p>
-                  <p className="mt-1 text-[11px] text-[#7B89A1]">
-                    Processed {item.processed_at ? formatDateTime(item.processed_at) : '-'}
-                  </p>
+              return (
+                <li
+                  key={item.id}
+                  className={`rounded-lg border px-3 py-2.5 ${
+                    focusedPendingIndex === index
+                      ? 'bg-[#FAFAF9] ring-1 ring-[#E8E2D8]'
+                      : 'bg-white hover:bg-[#FAFAF9]'
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-[#1C1714]">{item.title}</p>
+                  <p className="mt-1 text-xs text-[#7A6F65]">{item.body ?? 'No details.'}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-[#F5F4F2] px-2 py-0.5 text-[11px] font-semibold text-[#7A6F65]">
+                      {meta.label}
+                    </span>
+                    <span className="rounded-full bg-[#F5F4F2] px-2 py-0.5 text-[11px] font-semibold text-[#7A6F65]">
+                      {item.source}
+                    </span>
+                    <span className="text-[11px] text-[#7A6F65]">{formatDateTime(item.created_at)}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => handlePrimaryAction(item)}
+                      className="rounded-md bg-[#C8620A] px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-[#A04D06]"
+                      type="button"
+                    >
+                      {meta.primaryAction}
+                    </button>
+                    <button
+                      onClick={() => handleSecondaryAction(item.id)}
+                      className="rounded-md border border-[#E8E2D8] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#7A644F] transition-colors hover:border-[#D0C8BE]"
+                      type="button"
+                    >
+                      {meta.secondaryAction}
+                    </button>
+                    <Link
+                      href={related.href}
+                      className="rounded-md border border-[#E8E2D8] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#7A644F] transition-colors hover:border-[#C8620A] hover:text-[#C8620A]"
+                    >
+                      {related.label}
+                    </Link>
+                  </div>
                 </li>
-              ))}
-            </ul>
-          )}
-        </article>
+              )
+            })}
+          </ul>
+        )}
       </section>
+
+      <section className="rounded-2xl border border-[#E8E2D8] bg-white p-5 shadow-sm sm:p-6">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-[#1C1714]">Processed</h2>
+          <span className="rounded-full bg-[#F5F4F2] px-2.5 py-1 text-xs font-semibold text-[#7A6F65]">
+            {processed.length}
+          </span>
+        </div>
+
+        {processed.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-[#E8E2D8] bg-[#FAFAF9] px-3 py-4 text-sm text-[#7A6F65]">
+            No processed items yet.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {processed.slice(0, 12).map((item) => (
+              <li key={item.id} className="rounded-lg border border-[#E8E2D8] bg-[#FAFAF9] px-3 py-2.5">
+                <p className="text-sm font-medium text-[#1C1714]">{item.title}</p>
+                <p className="mt-1 text-[11px] text-[#7A6F65]">
+                  Processed {item.processed_at ? formatDateTime(item.processed_at) : '-'}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {decisionDraft ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-30 bg-black/20"
+            aria-label="Close"
+            onClick={() => setDecisionDraft(null)}
+          />
+          <div className="fixed inset-x-4 top-24 z-40 mx-auto w-full max-w-lg rounded-2xl border border-[#E8E2D8] bg-white p-5 shadow-xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">Decision needed</p>
+            <p className="mt-1 text-base font-semibold text-[#1C1714]">{decisionDraft.item.title}</p>
+            {decisionDraft.item.body ? (
+              <p className="mt-1 text-sm text-[#7A6F65]">{decisionDraft.item.body}</p>
+            ) : null}
+            <label className="mt-4 block">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#7A6F65]">What&apos;s your call?</span>
+              <input
+                autoFocus
+                value={decisionDraft.call}
+                onChange={(event) =>
+                  setDecisionDraft((current) =>
+                    current ? { ...current, call: event.target.value } : null
+                  )
+                }
+                placeholder="e.g. Go with option B - ship by Friday"
+                className="mt-1 w-full rounded-xl border border-[#E8E2D8] bg-[#FAFAF9] px-3 py-2.5 text-sm text-[#1C1714] outline-none transition focus:border-[#C8620A]"
+              />
+            </label>
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                disabled={!decisionDraft.call.trim()}
+                onClick={() => {
+                  createTask({
+                    title: decisionDraft.call.trim(),
+                    description: `Decision for: ${decisionDraft.item.title}`,
+                    priority: 'high',
+                    owner_type: 'human',
+                    tags: ['inbox', 'decision'],
+                  })
+                  markInboxItemProcessed(decisionDraft.item.id)
+                  touchLastChecked()
+                  setDecisionDraft(null)
+                }}
+                className="rounded-lg bg-[#C8620A] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#A04D06] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Create task
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  markInboxItemProcessed(decisionDraft.item.id)
+                  touchLastChecked()
+                  setDecisionDraft(null)
+                }}
+                className="rounded-lg border border-[#E8E2D8] px-3 py-2 text-sm font-medium text-[#7A6F65] hover:border-[#D0C8BE]"
+              >
+                Dismiss
+              </button>
+              <button
+                type="button"
+                onClick={() => setDecisionDraft(null)}
+                className="ml-auto text-sm text-[#7A6F65] hover:text-[#1C1714]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
     </div>
   )
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+export default function InboxPage() {
   return (
-    <div className="rounded-xl border border-[#CBD4E1] bg-white px-3 py-3">
-      <p className="text-xs uppercase tracking-[0.14em] text-[#6A7892]">{label}</p>
-      <p className="mt-1 text-xl font-semibold text-[#1A2433]">{value}</p>
-    </div>
-  )
-}
-
-function Empty({ text }: { text: string }) {
-  return (
-    <div className="rounded-lg border border-dashed border-[#CBD4E1] bg-[#F8FBFF] px-3 py-8 text-center text-sm text-[#6A7892]">
-      <div className="mx-auto mb-2 inline-flex rounded-lg bg-white p-2 text-[#6A7892]">
-        <Inbox className="h-4 w-4" />
-      </div>
-      <p>{text}</p>
-      <p className="mt-1 text-xs text-[#7B89A1]">Captured items appear here.</p>
-    </div>
+    <Suspense
+      fallback={
+        <div className="rounded-2xl border border-[#E8E2D8] bg-white p-5 text-sm text-[#7A6F65] shadow-sm">
+          Loading inbox...
+        </div>
+      }
+    >
+      <InboxPageContent />
+    </Suspense>
   )
 }

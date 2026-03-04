@@ -70,20 +70,17 @@ export interface WorkspaceArticle {
   updated_at: string
 }
 
-export type InboxItemType = 'task' | 'link' | 'note' | 'email' | 'decision'
+export type InboxItemType = 'agent_suggestion' | 'decision_needed' | 'shared_update' | 'overdue_flag'
 export type InboxItemStatus = 'new' | 'processed'
-export type InboxUrgency = 'auto' | 'now' | 'today' | 'week' | 'later'
 
 export interface WorkspaceInboxItem {
   id: string
   board: WorkspaceBoard
   title: string
   type: InboxItemType
-  urgency: InboxUrgency
-  source_url: string | null
-  notes: string | null
+  body: string | null
+  source: string
   status: InboxItemStatus
-  created_by: string
   created_at: string
   processed_at: string | null
 }
@@ -460,13 +457,11 @@ function buildSeedWorkspaceData(): WorkspaceData {
     {
       id: 'inbox_seed_1',
       board: 'a',
-      title: 'Review attached pricing teardown links from today',
-      type: 'link',
-      urgency: 'today',
-      source_url: 'https://www.cxl.com/blog/',
-      notes: 'Pull the 3 strongest ideas and convert to backlog tasks.',
+      title: 'Agent suggests tightening the homepage value proposition',
+      type: 'agent_suggestion',
+      body: 'Based on recent calls and notes, lead with one clear promise and move proof blocks above the fold.',
+      source: 'AI Partner',
       status: 'new',
-      created_by: 'David',
       created_at: isoDaysFromNow(0),
       processed_at: null,
     },
@@ -474,13 +469,22 @@ function buildSeedWorkspaceData(): WorkspaceData {
       id: 'inbox_seed_2',
       board: 'a',
       title: 'Choose one launch narrative for dashboard relaunch',
-      type: 'decision',
-      urgency: 'week',
-      source_url: null,
-      notes: 'Need 3 options + recommendation.',
+      type: 'decision_needed',
+      body: 'Three angles are ready. Pick one direction so execution can continue without drift.',
+      source: 'David',
       status: 'new',
-      created_by: 'David',
       created_at: isoDaysFromNow(-1),
+      processed_at: null,
+    },
+    {
+      id: 'inbox_seed_3',
+      board: 'a',
+      title: 'Reminder: client follow-up task is overdue',
+      type: 'overdue_flag',
+      body: 'The follow-up task passed its due date yesterday and still sits in backlog.',
+      source: 'AI Partner',
+      status: 'new',
+      created_at: isoDaysFromNow(-2),
       processed_at: null,
     },
   ]
@@ -668,6 +672,18 @@ export function getSeedWorkspaceData(): WorkspaceData {
   return cloneData(buildSeedWorkspaceData())
 }
 
+function normalizeInboxType(type: unknown): InboxItemType {
+  if (type === 'agent_suggestion' || type === 'decision_needed' || type === 'shared_update' || type === 'overdue_flag') {
+    return type
+  }
+
+  if (type === 'decision') {
+    return 'decision_needed'
+  }
+
+  return 'agent_suggestion'
+}
+
 export function loadWorkspaceData(): WorkspaceData {
   if (typeof window === 'undefined') {
     return getSeedWorkspaceData()
@@ -684,13 +700,34 @@ export function loadWorkspaceData(): WorkspaceData {
   try {
     const parsed = JSON.parse(raw) as Partial<WorkspaceData>
 
+    const nextInbox: WorkspaceInboxItem[] = Array.isArray(parsed.inbox)
+      ? parsed.inbox.map((rawItem) => {
+          const item = rawItem as Partial<WorkspaceInboxItem> & {
+            notes?: string | null
+            created_by?: string
+          }
+
+          return {
+            id: typeof item.id === 'string' ? item.id : createEntityId('inbox'),
+            board: item.board === 'b' ? 'b' : 'a',
+            title: typeof item.title === 'string' ? item.title : 'Inbox item',
+            type: normalizeInboxType(item.type),
+            body: typeof item.body === 'string' ? item.body : typeof item.notes === 'string' ? item.notes : null,
+            source: typeof item.source === 'string' ? item.source : typeof item.created_by === 'string' ? item.created_by : 'AI Partner',
+            status: item.status === 'processed' ? 'processed' : 'new',
+            created_at: typeof item.created_at === 'string' ? item.created_at : seed.inbox[0]?.created_at ?? new Date().toISOString(),
+            processed_at: typeof item.processed_at === 'string' ? item.processed_at : null,
+          }
+        })
+      : seed.inbox
+
     return {
       tasks: Array.isArray(parsed.tasks) ? parsed.tasks : seed.tasks,
       projects: Array.isArray(parsed.projects) ? parsed.projects : seed.projects,
       ideas: Array.isArray(parsed.ideas) ? parsed.ideas : seed.ideas,
       readingLists: Array.isArray(parsed.readingLists) ? parsed.readingLists : seed.readingLists,
       articles: Array.isArray(parsed.articles) ? parsed.articles : seed.articles,
-      inbox: Array.isArray(parsed.inbox) ? parsed.inbox : seed.inbox,
+      inbox: nextInbox,
       sharedTodos: Array.isArray(parsed.sharedTodos) ? parsed.sharedTodos : seed.sharedTodos,
       shoppingItems: Array.isArray(parsed.shoppingItems) ? parsed.shoppingItems : seed.shoppingItems,
       calendarEvents: Array.isArray(parsed.calendarEvents) ? parsed.calendarEvents : seed.calendarEvents,
