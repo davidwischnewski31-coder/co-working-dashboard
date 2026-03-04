@@ -3,45 +3,50 @@
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { TaskCard } from './TaskCard'
-import type { Task } from '@/lib/validations'
+import type { TaskStatus, WorkspaceTask } from '@/lib/workspace'
 
-interface KanbanColumnProps {
-  id: string
-  title: string
-  tasks: (Task & { project_name?: string; project_color?: string })[]
+interface TaskBoardItem extends WorkspaceTask {
+  project_name?: string
+  project_color?: string
 }
 
-export function KanbanColumn({ id, title, tasks }: KanbanColumnProps) {
-  const { setNodeRef } = useDroppable({ id })
+interface KanbanColumnProps {
+  id: TaskStatus
+  title: string
+  tone: string
+  tasks: TaskBoardItem[]
+}
+
+export function KanbanColumn({ id, title, tone, tasks }: KanbanColumnProps) {
+  const { setNodeRef, isOver } = useDroppable({ id })
 
   return (
-    <div className="flex-1 min-w-[300px]">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-900">{title}</h3>
-        <span className="inline-flex items-center justify-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+    <section className="min-w-[290px] flex-1 rounded-xl border border-[#ebdec9] bg-[#fffdf8] p-3">
+      <header className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-600">{title}</h3>
+        <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm">
           {tasks.length}
         </span>
-      </div>
+      </header>
 
       <div
         ref={setNodeRef}
-        className="space-y-3 min-h-[200px] rounded-lg bg-gray-50 p-3"
+        className={`min-h-[320px] space-y-3 rounded-lg p-2 transition-colors ${tone} ${
+          isOver ? 'ring-2 ring-orange-300' : ''
+        }`}
       >
-        <SortableContext
-          items={tasks.map(t => t.id)}
-          strategy={verticalListSortingStrategy}
-        >
+        <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
           {tasks.map((task) => (
             <TaskCard key={task.id} task={task} />
           ))}
         </SortableContext>
 
-        {tasks.length === 0 && (
-          <div className="flex items-center justify-center py-8 text-sm text-gray-400">
-            No tasks
+        {tasks.length === 0 ? (
+          <div className="rounded-md border border-dashed border-[#e4d8c5] bg-white/70 px-3 py-6 text-center text-sm text-slate-500">
+            Drop tasks here
           </div>
-        )}
+        ) : null}
       </div>
-    </div>
+    </section>
   )
 }
