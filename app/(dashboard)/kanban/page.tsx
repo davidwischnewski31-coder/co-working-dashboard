@@ -2,10 +2,11 @@
 
 import { JourneyPanel } from '@/components/variant/JourneyPanel'
 
+import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Filter, Plus, Target } from 'lucide-react'
+import { ChevronDown, ChevronRight, Filter, Plus, Target } from 'lucide-react'
 import { useWorkspace } from '@/components/providers/WorkspaceProvider'
 import { formatDaysInStatus } from '@/lib/utils'
 import type { OwnerType, TaskPriority, TaskStatus, WorkspaceTask } from '@/lib/workspace'
@@ -94,6 +95,8 @@ function KanbanPageContent() {
   const [projectFilter, setProjectFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | TaskStatus>('all')
   const [savedView, setSavedView] = useState<SavedView>('custom')
+  const [boardView, setBoardView] = useState<'all_tasks' | 'by_project'>('all_tasks')
+  const [collapsedProjectGroups, setCollapsedProjectGroups] = useState<Record<string, boolean>>({})
   const [closureTaskId, setClosureTaskId] = useState<string | null>(null)
   const [closureNote, setClosureNote] = useState('')
 
@@ -131,6 +134,30 @@ function KanbanPageContent() {
       }
     })
   }, [data.projects, data.tasks])
+
+  const groupedProjectData = useMemo(() => {
+    const ordered = [...tasks].sort((left, right) => {
+      const statusScore = left.status === 'done' ? 1 : 0
+      const rightStatusScore = right.status === 'done' ? 1 : 0
+      if (statusScore !== rightStatusScore) {
+        return statusScore - rightStatusScore
+      }
+      return priorityOrder[right.priority] - priorityOrder[left.priority]
+    })
+
+    const projectGroups = data.projects
+      .map((project) => ({
+        id: project.id,
+        name: project.name,
+        color: project.color,
+        tasks: ordered.filter((task) => task.project_id === project.id),
+      }))
+      .filter((group) => group.tasks.length > 0)
+
+    const unassignedTasks = ordered.filter((task) => !task.project_id)
+
+    return { projectGroups, unassignedTasks }
+  }, [data.projects, tasks])
 
   const filteredTasks = useMemo(() => {
     const now = new Date()
@@ -238,6 +265,13 @@ function KanbanPageContent() {
     setStatusFilter('all')
   }
 
+  function toggleProjectGroup(groupId: string) {
+    setCollapsedProjectGroups((current) => ({
+      ...current,
+      [groupId]: !current[groupId],
+    }))
+  }
+
   function handleCreateTask(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -339,15 +373,37 @@ function KanbanPageContent() {
           primaryTask ? 'bg-white shadow-sm' : 'bg-white shadow-sm'
         }`}
       >
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-xl font-semibold text-[#1C1714] sm:text-2xl">Task Board</h1>
             <p className="mt-1 text-sm text-[#5F4E3D]">
               Capture quickly, prioritize clearly, and move work from chaos to done.
             </p>
           </div>
-          <div className="hidden rounded-xl border border-[#E8E2D8] bg-[#F7F1E8] px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#5F4E3D] sm:block">
-            Local-first mode
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-lg border border-[#E8E2D8] bg-white p-1">
+              <button
+                type="button"
+                onClick={() => setBoardView('all_tasks')}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  boardView === 'all_tasks' ? 'bg-[#FFF1DA] text-[#5B3A1C]' : 'text-[#7A6F65] hover:bg-[#FAFAF9]'
+                }`}
+              >
+                All Tasks
+              </button>
+              <button
+                type="button"
+                onClick={() => setBoardView('by_project')}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  boardView === 'by_project' ? 'bg-[#FFF1DA] text-[#5B3A1C]' : 'text-[#7A6F65] hover:bg-[#FAFAF9]'
+                }`}
+              >
+                By Project
+              </button>
+            </div>
+            <div className="hidden rounded-xl border border-[#E8E2D8] bg-[#F7F1E8] px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#5F4E3D] sm:block">
+              Local-first mode
+            </div>
           </div>
         </div>
 
@@ -466,6 +522,7 @@ function KanbanPageContent() {
         )}
       </section>
 
+      {boardView === 'all_tasks' ? (
       <section className="grid gap-6 xl:grid-cols-[1.2fr_320px]">
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#E8E2D8] bg-white p-4 shadow-sm">
@@ -631,6 +688,94 @@ function KanbanPageContent() {
           </div>
         </aside>
       </section>
+      ) : (
+        <section className="space-y-4">
+          <div className="flex items-center justify-between rounded-2xl border border-[#E8E2D8] bg-white p-4 shadow-sm">
+            <p className="text-sm text-[#5F4E3D]">By Project groups tasks by project_id and ignores active filters.</p>
+            <Link href="/projects" className="text-xs font-semibold text-[#2453A6] hover:underline">
+              Open projects →
+            </Link>
+          </div>
+
+          {groupedProjectData.projectGroups.length === 0 && groupedProjectData.unassignedTasks.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-[#E8E2D8] bg-[#FAFAF9] px-4 py-10 text-center">
+              <p className="text-base font-semibold text-[#1C1714]">No tasks yet</p>
+              <p className="mt-1 text-sm text-[#5F4E3D]">Create your first task to start grouping by project.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {groupedProjectData.projectGroups.map((group) => {
+                const collapsed = Boolean(collapsedProjectGroups[group.id])
+
+                return (
+                  <article key={group.id} className="rounded-2xl border border-[#E8E2D8] bg-white p-4 shadow-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleProjectGroup(group.id)}
+                        className="inline-flex items-center gap-2 text-left"
+                      >
+                        {collapsed ? <ChevronRight className="h-4 w-4 text-[#7A6F65]" /> : <ChevronDown className="h-4 w-4 text-[#7A6F65]" />}
+                        <span className="inline-flex h-2.5 w-2.5 rounded-full" style={{ backgroundColor: group.color ?? '#C9B79F' }} />
+                        <span className="text-sm font-semibold text-[#1C1714]">{group.name}</span>
+                        <span className="rounded-full bg-[#F5F4F2] px-2 py-0.5 text-[11px] font-semibold text-[#7A6F65]">{group.tasks.length}</span>
+                      </button>
+                      <Link href={'/projects/' + group.id} className="text-xs font-semibold text-[#2453A6] hover:underline">
+                        Open project →
+                      </Link>
+                    </div>
+
+                    {!collapsed ? (
+                      <ul className="mt-3 space-y-2">
+                        {group.tasks.map((task) => (
+                          <li key={task.id} className="rounded-lg border border-[#D7E0EB] bg-[#F8FBFF] px-3 py-2.5">
+                            <p className="text-sm font-semibold text-[#1A2433]">{task.title}</p>
+                            <p className="mt-1 text-xs text-[#5E6B82]">
+                              {task.status.replace('_', ' ')} · {task.owner_type === 'human' ? 'David' : 'AI Partner'}
+                              {task.due_date ? ' · Due ' + new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </article>
+                )
+              })}
+
+              {groupedProjectData.unassignedTasks.length > 0 ? (
+                <article className="rounded-2xl border border-[#E8E2D8] bg-white p-4 shadow-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleProjectGroup('unassigned')}
+                      className="inline-flex items-center gap-2 text-left"
+                    >
+                      {collapsedProjectGroups.unassigned ? <ChevronRight className="h-4 w-4 text-[#7A6F65]" /> : <ChevronDown className="h-4 w-4 text-[#7A6F65]" />}
+                      <span className="inline-flex h-2.5 w-2.5 rounded-full bg-[#C9B79F]" />
+                      <span className="text-sm font-semibold text-[#1C1714]">Unassigned</span>
+                      <span className="rounded-full bg-[#F5F4F2] px-2 py-0.5 text-[11px] font-semibold text-[#7A6F65]">{groupedProjectData.unassignedTasks.length}</span>
+                    </button>
+                  </div>
+
+                  {!collapsedProjectGroups.unassigned ? (
+                    <ul className="mt-3 space-y-2">
+                      {groupedProjectData.unassignedTasks.map((task) => (
+                        <li key={task.id} className="rounded-lg border border-[#D7E0EB] bg-[#F8FBFF] px-3 py-2.5">
+                          <p className="text-sm font-semibold text-[#1A2433]">{task.title}</p>
+                          <p className="mt-1 text-xs text-[#5E6B82]">
+                            {task.status.replace('_', ' ')} · {task.owner_type === 'human' ? 'David' : 'AI Partner'}
+                            {task.due_date ? ' · Due ' + new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </article>
+              ) : null}
+            </div>
+          )}
+        </section>
+      )}
 
       {closureTaskId ? (
         <div className="fixed bottom-12 right-4 z-50 w-72 rounded-2xl border border-[#E8E2D8] bg-white p-4 shadow-lg">

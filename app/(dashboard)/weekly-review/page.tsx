@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowRight, CheckCircle2, CircleAlert, Clock3, Sparkles } from 'lucide-react'
+import { ArrowRight, CheckCircle2, CircleAlert, Clock3 } from 'lucide-react'
 import { useWorkspace } from '@/components/providers/WorkspaceProvider'
 import { daysSince, formatDate, formatDateTime, formatDaysInStatus } from '@/lib/utils'
 
@@ -56,15 +56,11 @@ export default function WeeklyReviewPage() {
 
   return (
     <div className="space-y-6 variant-page">
-      <section className="rounded-3xl border border-[#CBD4E1] bg-[#F8FBFF] p-6 shadow-sm sm:p-8">
-        <p className="inline-flex items-center gap-2 rounded-full border border-[#CBD4E1] bg-white px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#506079]">
-          <Sparkles className="h-3.5 w-3.5" />
-          Board A - Weekly Review
-        </p>
-        <h1 className="mt-3 text-2xl font-semibold leading-tight text-[#1A2433] sm:text-3xl">
+      <section className="rounded-3xl border border-[#E8E2D8] bg-[rgba(250,249,247,0.94)] p-6 shadow-sm sm:p-8">
+        <h1 className="text-2xl font-semibold leading-tight text-[#1C1714] sm:text-3xl">
           Close the loop on what shipped, what slipped, and what needs intervention.
         </h1>
-        <p className="mt-2 text-sm text-[#5E6B82]">
+        <p className="mt-2 text-sm text-[#7A6F65]">
           Window: {formatDate(weekStart)} - {formatDate(now)}
         </p>
       </section>
@@ -77,23 +73,23 @@ export default function WeeklyReviewPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.1fr_1fr]">
-        <article className="rounded-2xl border border-[#CBD4E1] bg-white p-5 shadow-sm sm:p-6">
+        <article className="rounded-2xl border border-[#E8E2D8] bg-white p-5 shadow-sm sm:p-6">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-[#1A2433]">Done This Week</h2>
-            <Link href="/kanban?status=done" className="text-xs font-semibold text-[#2453A6] hover:underline">
+            <h2 className="text-lg font-semibold text-[#1C1714]">Done This Week</h2>
+            <Link href="/kanban?status=done" className="text-xs font-semibold text-[#C8620A] hover:underline">
               Open Done
             </Link>
           </div>
           {completedThisWeek.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-[#CBD4E1] bg-[#F8FBFF] px-3 py-4 text-sm text-[#6A7892]">
+            <p className="rounded-lg border border-dashed border-[#E8E2D8] bg-[#FAFAF9] px-3 py-4 text-sm text-[#7A6F65]">
               No completed tasks in the last 7 days.
             </p>
           ) : (
             <ul className="space-y-2">
               {completedThisWeek.slice(0, 12).map((task) => (
-                <li key={task.id} className="rounded-lg border border-[#D7E0EB] bg-[#F8FBFF] px-3 py-2.5">
-                  <p className="text-sm font-semibold text-[#1A2433]">{task.title}</p>
-                  <p className="mt-1 text-[11px] text-[#6A7892]">
+                <li key={task.id} className="rounded-lg border border-[#E8E2D8] bg-[#FAFAF9] px-3 py-2.5">
+                  <p className="text-sm font-semibold text-[#1C1714]">{task.title}</p>
+                  <p className="mt-1 text-[11px] text-[#7A6F65]">
                     Completed {task.completed_at ? formatDateTime(task.completed_at) : '-'}
                   </p>
                 </li>
@@ -104,8 +100,8 @@ export default function WeeklyReviewPage() {
 
         <article className="rounded-2xl border border-[#E5CAD0] bg-white p-5 shadow-sm sm:p-6">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-[#1A2433]">Slipped / Stuck</h2>
-            <Link href="/kanban" className="text-xs font-semibold text-[#2453A6] hover:underline">
+            <h2 className="text-lg font-semibold text-[#1C1714]">Slipped / Stuck</h2>
+            <Link href="/kanban" className="text-xs font-semibold text-[#C8620A] hover:underline">
               Open Kanban
             </Link>
           </div>
@@ -119,7 +115,7 @@ export default function WeeklyReviewPage() {
                 .slice(0, 12)
                 .map((task) => (
                   <li key={task.id} className="rounded-lg border border-[#EED7DB] bg-[#FFF8F9] px-3 py-2.5">
-                    <p className="text-sm font-semibold text-[#1A2433]">{task.title}</p>
+                    <p className="text-sm font-semibold text-[#1C1714]">{task.title}</p>
                     <p className="mt-1 text-[11px] text-[#7D4C56]">
                       {task.due_date && new Date(task.due_date) < now ? `Due ${formatDate(task.due_date)} · ` : ''}
                       {formatDaysInStatus(task.updated_at)}
@@ -131,22 +127,22 @@ export default function WeeklyReviewPage() {
         </article>
       </section>
 
-      <section className="rounded-2xl border border-[#CAD5E4] bg-white p-5 shadow-sm sm:p-6">
+      <section className="rounded-2xl border border-[#E8E2D8] bg-white p-5 shadow-sm sm:p-6">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-[#1A2433]">Agent Suggestions</h2>
-          <Link href="/overview" className="inline-flex items-center gap-1 text-xs font-semibold text-[#2453A6] hover:underline">
+          <h2 className="text-lg font-semibold text-[#1C1714]">Review Prompts</h2>
+          <Link href="/overview" className="inline-flex items-center gap-1 text-xs font-semibold text-[#C8620A] hover:underline">
             Back to Overview
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>
         {latestRun ? (
-          <p className="mb-3 rounded-lg border border-[#D7E0EB] bg-[#F8FBFF] px-3 py-2 text-sm text-[#5E6B82]">
-            Last agent run: {formatDateTime(latestRun.timestamp)} - {latestRun.summary}
+          <p className="mb-3 rounded-lg border border-[#E8E2D8] bg-[#FAFAF9] px-3 py-2 text-sm text-[#7A6F65]">
+            Last analysis run: {formatDateTime(latestRun.timestamp)} - {latestRun.summary}
           </p>
         ) : null}
         <ul className="space-y-2">
           {suggestions.map((suggestion) => (
-            <li key={suggestion} className="rounded-lg border border-[#D7E0EB] bg-[#F8FBFF] px-3 py-2.5 text-sm text-[#1A2433]">
+            <li key={suggestion} className="rounded-lg border border-[#E8E2D8] bg-[#FAFAF9] px-3 py-2.5 text-sm text-[#1C1714]">
               {suggestion}
             </li>
           ))}
@@ -158,10 +154,10 @@ export default function WeeklyReviewPage() {
 
 function MetricCard({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-[#CBD4E1] bg-white p-4 shadow-sm sm:p-5">
-      <div className="mb-2 inline-flex rounded-lg bg-[#EEF3FA] p-2 text-[#415069]">{icon}</div>
-      <p className="text-sm font-medium text-[#5E6B82]">{label}</p>
-      <p className="mt-1 text-4xl font-semibold text-[#1A2433] font-[family-name:var(--font-dashboard-mono)] tabular-nums">{value}</p>
+    <div className="rounded-2xl border border-[#E8E2D8] bg-white p-4 shadow-sm sm:p-5">
+      <div className="mb-2 inline-flex rounded-lg bg-[#F5F4F2] p-2 text-[#7A644F]">{icon}</div>
+      <p className="text-sm font-medium text-[#7A6F65]">{label}</p>
+      <p className="mt-1 text-4xl font-semibold text-[#1C1714] font-[family-name:var(--font-dashboard-mono)] tabular-nums">{value}</p>
     </div>
   )
 }

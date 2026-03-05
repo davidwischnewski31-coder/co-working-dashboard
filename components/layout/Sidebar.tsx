@@ -5,13 +5,9 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
-  Activity,
   BookOpen,
-  Bot,
-  Briefcase,
   CalendarDays,
   ClipboardCheck,
-  ClipboardList,
   ChevronLeft,
   ChevronRight,
   History,
@@ -23,10 +19,7 @@ import {
   PanelLeftClose,
   ShoppingBasket,
   Sparkles,
-  NotebookPen,
-  SunMoon,
 } from 'lucide-react'
-import { useWorkspace } from '@/components/providers/WorkspaceProvider'
 import { getDashboardTheme } from '@/lib/dashboardVariant'
 
 interface SidebarProps {
@@ -38,7 +31,7 @@ interface SidebarProps {
   onToggleCollapse: () => void
 }
 
-type NavKey = 'overview' | 'kanban' | 'projects' | 'ideas' | 'reading' | 'activity'
+type NavKey = 'overview' | 'kanban' | 'ideas' | 'reading'
 
 type NavItem = {
   href: string
@@ -49,17 +42,11 @@ type NavItem = {
 
 const boardANavigation: NavItem[] = [
   { key: 'overview', href: '/overview', icon: Sparkles },
-  { href: '/capture', icon: NotebookPen, label: 'Capture' },
   { href: '/inbox', icon: Inbox, label: 'Inbox' },
   { key: 'kanban', href: '/kanban', icon: KanbanSquare },
-  { key: 'projects', href: '/projects', icon: Briefcase },
   { key: 'ideas', href: '/ideas', icon: Lightbulb },
   { key: 'reading', href: '/reading', icon: BookOpen },
-  { key: 'activity', href: '/activity', icon: Activity },
-  { href: '/decisions', icon: ClipboardList, label: 'Decisions' },
-  { href: '/daily', icon: SunMoon, label: 'Daily Workflow' },
   { href: '/weekly-review', icon: ClipboardCheck, label: 'Weekly Review' },
-  { href: '/agent-log', icon: Bot, label: 'Agent Log' },
 ]
 
 const boardBNavigation: NavItem[] = [
@@ -93,7 +80,6 @@ export function Sidebar({
   const pathname = usePathname()
   const router = useRouter()
   const theme = getDashboardTheme()
-  const { isAgentRunning } = useWorkspace()
   const board = pathname.startsWith('/shared') ? 'b' : 'a'
   const navigation = board === 'a' ? boardANavigation : boardBNavigation
   const isIconOnlyDesktop = isCollapsed && !isDesktopExpanded
@@ -236,9 +222,6 @@ export function Sidebar({
               >
                 <span className="relative inline-flex">
                   <item.icon className={cn('h-4 w-4', active ? 'opacity-100' : 'opacity-75')} />
-                  {item.href === '/agent-log' && isAgentRunning ? (
-                    <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                  ) : null}
                 </span>
                 <span className={cn(isIconOnlyDesktop ? 'lg:hidden' : '')}>{label}</span>
                 {isIconOnlyDesktop ? (
