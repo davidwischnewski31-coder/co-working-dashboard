@@ -107,9 +107,6 @@ export function Header({ onOpenSidebar }: HeaderProps) {
             </div>
           ) : null}
 
-          <kbd className={`hidden items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium lg:inline-flex ${board === 'a' ? 'border-[#E8D8BF] bg-white text-[#7A644F]' : 'border-[#E8D8BF] bg-white text-[#7A644F]'}`}>
-            <span className="text-[10px]">⌘</span>K
-          </kbd>
           <button
             onClick={handleReset}
             className={`text-xs underline-offset-2 transition-colors hover:underline ${board === 'a' ? 'text-[#A18466] hover:text-[#7A644F]' : 'text-[#A18466] hover:text-[#7A644F]'}`}

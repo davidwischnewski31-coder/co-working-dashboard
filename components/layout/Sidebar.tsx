@@ -82,6 +82,7 @@ export function Sidebar({
   const theme = getDashboardTheme()
   const board = pathname.startsWith('/shared') ? 'b' : 'a'
   const navigation = board === 'a' ? boardANavigation : boardBNavigation
+  const boardLabel = board === 'a' ? 'My Workspace' : 'Shared Workspace'
   const isIconOnlyDesktop = isCollapsed && !isDesktopExpanded
   const [switcherOpen, setSwitcherOpen] = useState(false)
 
@@ -138,13 +139,13 @@ export function Sidebar({
               className="group flex w-full flex-col rounded-xl border border-[#E8D8BF] bg-white px-3 py-2.5 text-left shadow-sm transition-colors hover:bg-[#FFF8EE]"
             >
               <p className="text-[10px] uppercase tracking-[0.2em] text-[#7A6F65]">
-                {board === 'a' ? 'Board A' : 'Board B'}
+                {boardLabel}
                 <LayoutGrid className="ml-1.5 inline-block h-3 w-3 opacity-50 group-hover:opacity-100" />
               </p>
               <h1 className="mt-1 text-base font-semibold text-[#1C1714]">
                 {board === 'a' ? 'Execution OS' : 'Life OS'}
               </h1>
-              <p className="mt-1 text-[11px] text-[#7A6F65]">Switch board</p>
+              <p className="mt-1 text-[11px] text-[#7A6F65]">Switch workspace</p>
             </button>
             <button
               onClick={onClose}
@@ -172,7 +173,7 @@ export function Sidebar({
                 >
                   <div className="mt-1 h-2.5 w-2.5 rounded-full bg-[#C8620A]" />
                   <div>
-                    <p className="text-sm font-semibold text-[#1C1714]">Board A</p>
+                    <p className="text-sm font-semibold text-[#1C1714]">My Workspace</p>
                     <p className="text-xs text-[#7A6F65]">Execution OS</p>
                   </div>
                 </button>
@@ -189,7 +190,7 @@ export function Sidebar({
                 >
                   <div className="mt-1 h-2.5 w-2.5 rounded-full bg-[#7A6F65]" />
                   <div>
-                    <p className="text-sm font-semibold text-[#1C1714]">Board B</p>
+                    <p className="text-sm font-semibold text-[#1C1714]">Shared Workspace</p>
                     <p className="text-xs text-[#7A6F65]">Life OS</p>
                   </div>
                 </button>
@@ -238,7 +239,6 @@ export function Sidebar({
           <div className="mt-6 rounded-2xl border border-[#E8D8BF] bg-white p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7A644F]">Mode</p>
             <p className="mt-1 text-sm font-medium text-[#3D2A18]">{theme.modeLabel}</p>
-            <p className="mt-2 text-xs text-[#7A644F]">{theme.modeDescription}</p>
           </div>
         ) : null}
 
